@@ -1,4 +1,4 @@
-import React, { useContext } from 'react';
+import React, { useContext, useRef } from 'react';
 import { Pressable, StyleSheet, View, ScrollView, TextInput, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 import { Icon, type IconName } from './icon';
@@ -29,9 +29,11 @@ export const s = StyleSheet.create({
   divider: { borderBottomWidth: 1, borderColor: colors.line },
 });
 
-export function Page({ children, sectionGap, scrollRef }: React.PropsWithChildren<{ sectionGap?: number; scrollRef?: React.Ref<React.ComponentRef<typeof ScrollView>> }>) {
+const pageOffsets = new Map<string, number>();
+export function Page({ children, sectionGap, scrollRef, scrollKey }: React.PropsWithChildren<{ sectionGap?: number; scrollKey?: string; scrollRef?: React.Ref<React.ComponentRef<typeof ScrollView>> }>) {
   const wide = useWindowDimensions().width >= 760;
-  return <ScrollView ref={scrollRef} style={{ flex: 1 }} contentContainerStyle={[s.page, wide && { paddingTop: 36, gap: 28 }, sectionGap !== undefined && { gap: sectionGap }]} keyboardShouldPersistTaps="handled">{children}</ScrollView>;
+  const ownRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
+  return <ScrollView ref={scrollRef ?? ownRef} onContentSizeChange={() => { if (scrollKey) ownRef.current?.scrollTo({ y: pageOffsets.get(scrollKey) ?? 0, animated: false }); }} onScroll={event => { if (scrollKey) pageOffsets.set(scrollKey, event.nativeEvent.contentOffset.y); }} scrollEventThrottle={100} style={{ flex: 1 }} contentContainerStyle={[s.page, wide && { paddingTop: 36, gap: 28 }, sectionGap !== undefined && { gap: sectionGap }]} keyboardShouldPersistTaps="handled">{children}</ScrollView>;
 }
 
 export function Card({ children }: React.PropsWithChildren) { return <View style={s.card}>{children}</View>; }
@@ -66,14 +68,14 @@ export function Back({ title, onBack }: { title: string; onBack?: () => void }) 
   </Pressable><Text accessibilityRole="header" style={s.title}>{title}</Text></View>;
 }
 
-export function Search({ value, onChange, onSubmit, inline = false }: { value: string; onChange: (value: string) => void; onSubmit: () => void; inline?: boolean }) {
+export function Search({ value, onChange, onSubmit, inline = false, onDark = false }: { value: string; onChange: (value: string) => void; onSubmit: () => void; inline?: boolean; onDark?: boolean }) {
   const fontsReady = useContext(FontsReady);
   return <View style={{ gap: 10, flexDirection: inline ? 'row' : 'column', alignItems: 'stretch' }}><View style={{ flex: inline ? 1 : undefined, minWidth: 0, flexDirection: 'row', alignItems: 'center', backgroundColor: colors.white, borderWidth: 1, borderColor: '#AEBFB7', borderRadius: 8, gap: 10, paddingLeft: 14 }}>
     <Icon name="search" color={colors.muted} />
     <TextInput accessibilityLabel="Search medicine name, strength, or form" placeholder="Medicine name or generic" placeholderTextColor={colors.muted} value={value} onChangeText={onChange} onSubmitEditing={onSubmit} returnKeyType="search" style={[s.input, !fontsReady && { fontFamily: undefined }]} autoCorrect={false} />
     {!!value && <Pressable accessibilityRole="button" accessibilityLabel="Clear search" onPress={() => onChange('')} style={{ minWidth: 44, minHeight: 48, alignItems: 'center', justifyContent: 'center' }}><Icon name="close" size={18} color={colors.muted} /></Pressable>}
     {!value && <View style={{ width: 12 }} />}
-  </View><Button title={inline ? "Search" : "Search medicines"} onPress={onSubmit} /></View>;
+  </View><Button title={inline ? "Search" : "Search medicines"} secondary={onDark} onPress={onSubmit} /></View>;
 }
 
 export function Quantity({ value, max, onChange }: { value: number; max: number; onChange: (value: number) => void }) {

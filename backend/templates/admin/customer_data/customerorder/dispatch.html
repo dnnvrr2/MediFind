@@ -1,0 +1,12 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<p>Only dispatch an order after confirming directly with pharmacy staff that the order is genuine, sealed, and ready. Customer orders in this preview can be edited by the customer and do not by themselves prove pharmacy acceptance.</p>
+<form method="post">{% csrf_token %}
+<fieldset class="module aligned">
+  <div class="form-row"><label for="order_id">Delivery order</label><select name="order_id" id="order_id" required><option value="">Select a delivery order</option>{% for order in orders %}{% if order.data.method == "delivery" %}<option value="{{ order.pk }}">{{ order.external_id }} — {{ order.data.recipient.name }} — {{ order.data.status }}</option>{% endif %}{% endfor %}</select></div>
+  <div class="form-row"><label for="rider_id">Approved rider</label><select name="rider_id" id="rider_id" required><option value="">Select a rider</option>{% for rider in riders %}<option value="{{ rider.pk }}">{{ rider.user.full_name }} ({{ rider.user.email }})</option>{% endfor %}</select></div>
+  <div class="form-row"><label for="cod_amount">Cash due if order is cash on delivery</label><input name="cod_amount" id="cod_amount" type="number" min="0" max="100000" step="0.01" value="0"><p class="help">Enter the amount confirmed directly with pharmacy staff. Leave as 0 for prepaid orders.</p></div>
+  <div class="form-row"><label><input type="checkbox" name="verified_ready" value="yes" required> I contacted the pharmacy and confirmed this order is genuine, sealed, and ready for delivery.</label></div>
+</fieldset><div class="submit-row"><input type="submit" value="Create rider offer" class="default"></div>
+</form>
+{% endblock %}

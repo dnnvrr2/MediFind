@@ -13,7 +13,7 @@ export default function SearchResults() {
   const [query, setQuery] = useState(q);
   useEffect(() => setQuery(q), [q]);
   const results = searchMedicines(q, filter);
-  return <Page><Back title="Search medicines" /><Search value={query} onChange={setQuery} onSubmit={() => router.setParams({ q: query, filter })} />
+  return <Page scrollKey={`search:${q}:${filter}`}><Back title="Search medicines" /><Search value={query} onChange={setQuery} onSubmit={() => router.setParams({ q: query, filter })} />
     <View style={s.row}><Icon name="filter" size={18} color={colors.muted} />{['All', 'OTC', 'Rx'].map(f => <Pressable key={f} accessibilityRole="button" accessibilityState={{ selected: filter === f }} aria-pressed={filter === f} onPress={() => router.setParams({ filter: f })} style={{ minHeight: 44, paddingHorizontal: 14, justifyContent: 'center', borderRadius: 6, borderWidth: 1, borderColor: filter === f ? colors.teal : colors.line, backgroundColor: filter === f ? colors.pale : colors.white }}><Text style={{ fontSize: 14, lineHeight: 22, fontWeight: '500', color: filter === f ? colors.teal : colors.muted }}>{f === 'Rx' ? 'Prescription' : f}</Text></Pressable>)}</View>
     <Text accessibilityLiveRegion="polite" style={s.muted}>{results.length} {results.length === 1 ? 'result' : 'results'}{q ? ` for “${q}”` : ' in the sample catalog'}</Text>
     {!!results.length && <View style={s.list}>{results.map((m, i) => <MedicineRow key={m.id} medicine={m} last={i === results.length - 1} onPress={() => router.push({ pathname: '/medicine/[id]', params: { id: m.id } })} />)}</View>}

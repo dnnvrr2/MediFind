@@ -12,7 +12,15 @@
           "photosPermission": false
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow MediFind to find your barangay in Cagayan de Oro when you tap Use my location.",
+          "isIosBackgroundLocationEnabled": false,
+          "isAndroidBackgroundLocationEnabled": false
+        }
+      ]
     ],
     "name": "MediFind",
     "userInterfaceStyle": "light",

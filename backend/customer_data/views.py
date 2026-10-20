@@ -18,6 +18,25 @@ class OwnerCollectionMixin:
 class OrderListCreateView(OwnerCollectionMixin, generics.ListCreateAPIView):
     model = CustomerOrder
     serializer_class = CustomerOrderSerializer
+    def list(self, request, *args, **kwargs):
+        response = super().list(request, *args, **kwargs)
+        from riders.models import RiderDelivery
+        rows = response.data.get("results", response.data) if isinstance(response.data, dict) else response.data
+        delivery_ids = {row.get("external_id"): row for row in rows}
+        deliveries = RiderDelivery.objects.filter(order__owner=request.user).exclude(status__in=["offered", "declined", "cancelled"])
+        aliases = {"accepted": "confirmed", "at_pharmacy": "preparing", "picked_up": "preparing", "out_for_delivery": "out_for_delivery", "delivered": "delivered", "unsuccessful": "delivery_failed", "returning": "delivery_failed", "returned": "delivery_failed"}
+        customer_notes = {"accepted": "A rider accepted the assignment.", "at_pharmacy": "The rider arrived at the pharmacy.", "picked_up": "The sealed order was picked up.", "out_for_delivery": "The order is out for delivery.", "delivered": "The rider marked the order delivered.", "unsuccessful": "Delivery could not be completed. Dispatch will follow up.", "returning": "The order is being returned to the pharmacy.", "returned": "The order was returned to the pharmacy."}
+        for delivery in deliveries:
+            row = delivery_ids.get(delivery.order.external_id)
+            if not row or not isinstance(row.get("data"), dict):
+                continue
+            data = dict(row["data"])
+            data["status"] = aliases.get(delivery.status, data.get("status"))
+            if not isinstance(data.get("events"), list):
+                data["events"] = []
+            data["events"] = list(data["events"]) + [{"status": aliases.get(event.status, data["status"]), "at": int(event.created_at.timestamp() * 1000), "note": customer_notes.get(event.status, "Delivery status updated.")} for event in delivery.events.all()]
+            row["data"] = data
+        return response
     def create(self, request, *args, **kwargs):
         payload = request.data.copy()
         external_id = str(payload.get("external_id", "")).strip()

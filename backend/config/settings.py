@@ -18,7 +18,7 @@ INSTALLED_APPS = [
     "django.contrib.admin", "django.contrib.auth", "django.contrib.contenttypes",
     "django.contrib.sessions", "django.contrib.messages", "django.contrib.staticfiles",
     "rest_framework", "rest_framework_simplejwt.token_blacklist", "corsheaders",
-    "accounts", "customer_data",
+    "accounts", "customer_data", "riders",
 ]
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware", "corsheaders.middleware.CorsMiddleware",
@@ -60,7 +60,7 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": ["rest_framework_simplejwt.authentication.JWTAuthentication"],
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
     "DEFAULT_THROTTLE_CLASSES": ["rest_framework.throttling.AnonRateThrottle"],
-    "DEFAULT_THROTTLE_RATES": {"anon": "60/hour", "auth": "120/hour", "login": "10/minute", "register": "100/hour" if DEBUG else "5/hour", "password_reset": "5/hour"},
+    "DEFAULT_THROTTLE_RATES": {"anon": "60/hour", "auth": "120/hour", "login": "10/minute", "register": "100/hour" if DEBUG else "5/hour", "password_reset": "5/hour", "rider_action": "10/minute", "rider_issue": "10/hour", "delivery_code": "10/minute"},
 }
 from datetime import timedelta
 SIMPLE_JWT = {"ACCESS_TOKEN_LIFETIME": timedelta(minutes=10), "REFRESH_TOKEN_LIFETIME": timedelta(days=7),

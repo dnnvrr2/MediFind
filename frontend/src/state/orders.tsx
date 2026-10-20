@@ -14,6 +14,7 @@ type OrdersContext = {
   syncIssue: string;
   placeOrder: (items: CartItem[], draft: CheckoutDraft, submissionKey: string) => Promise<OrderResult>;
   updateOrder: (id: string, status: OrderStatus, note?: string) => Promise<OrderResult>;
+  refreshOrders: () => Promise<void>;
 };
 type RemoteOrder = { external_id: string; data: DemoOrder };
 const Context = createContext<OrdersContext | null>(null);
@@ -58,7 +59,17 @@ export function OrdersProvider({ children }: PropsWithChildren) {
     try { await api.saveOrder(result.order.id, result.order); setSyncIssue(''); return commit(result); }
     catch (error) { return { ok: false, state: latest.current, issue: error instanceof ApiError ? error.message : 'Could not save the order update. Please try again.' }; }
   };
-  return <Context.Provider value={{ orders: state.orders, approvals: remainingApprovals(grants, state.orders), loading, syncIssue, placeOrder, updateOrder }}>{children}</Context.Provider>;
+  const refreshOrders = async () => {
+    if (!profile) return;
+    try {
+      const response = await api.listOrders<RemoteOrder>();
+      const orders = orderRows(response).map(row => row.data).filter(Boolean);
+      latest.current = { orders, nextNumber: latest.current.nextNumber };
+      setState(latest.current);
+      setSyncIssue('');
+    } catch { setSyncIssue('Saved orders could not be refreshed. Check your connection.'); }
+  };
+  return <Context.Provider value={{ orders: state.orders, approvals: remainingApprovals(grants, state.orders), loading, syncIssue, placeOrder, updateOrder, refreshOrders }}>{children}</Context.Provider>;
 }
 export function useOrders() {
   const value = useContext(Context);

@@ -24,3 +24,5 @@ SQLite is used if no PostgreSQL environment variables are set. Set `DB_NAME`, `D
 Client supplied owner IDs are ignored. Records use a per-account external ID to make syncing local preview records idempotent. These endpoints persist sample/preview orders only; they do not reserve stock, collect payment, verify prescriptions, or place real pharmacy orders.
 
 Configure `CORS_ALLOWED_ORIGINS` as a comma-separated list of exact origins for browser development. For Expo Go on a phone, use the computer's LAN IP in `EXPO_PUBLIC_API_URL` and add that IP to `DJANGO_ALLOWED_HOSTS`. Do not use wildcard origins with credentials in production. The app keeps access tokens in memory and stores refresh tokens in OS secure storage on native or tab-scoped session storage on web. In local DEBUG mode, reset email is printed in the backend console; configure SMTP environment variables for actual email delivery. Set FRONTEND_BASE_URL to the app public URL before sending real email.
+
+Rider assignments, authorization, status events, and the manual dispatch workflow are documented in `../docs/RIDER_PORTAL.md`.

@@ -31,7 +31,7 @@ The Expo frontend runs on Android/iOS and in desktop/mobile browsers. It follows
 
 ### Preview boundaries
 
-All pharmacies, stock, classifications, hours, and prices are sample data, not verified live listings. No real orders, payments, authentication, location lookup, clinical dosing advice, or backend connections are implemented. Prescription files remain only in the app session and mobile OS cache; they are not transmitted. Simulated review buttons never represent pharmacist or medical approval. A real pharmacist must verify every prescription and item before fulfillment. Cart, checkout draft, and demo-order state are in memory and clear on browser refresh or app restart. The shared data lives in `frontend/src/data/catalog.ts`.
+All pharmacies, stock, classifications, hours, and prices are sample data, not verified live listings. The Django API provides customer accounts and stores preview orders and private prescription files, but it does not place real pharmacy orders, confirm stock, collect payments, or provide clinical dosing advice. Rider delivery assignments are manually created by staff after direct pharmacy confirmation; they do not connect to an order acceptance or inventory system. Simulated review buttons never represent pharmacist or medical approval. A real pharmacist must verify every prescription and item before fulfillment. Cart and checkout draft remain in memory and clear on browser refresh or app restart. The shared data lives in `frontend/src/data/catalog.ts`.
 
 ### Structure
 
@@ -44,13 +44,13 @@ frontend/
     domain/        # Stock and cart rules
     state/         # Session state for cart, checkout, orders, and prescriptions
   tests/           # Search, cart, checkout, order, and prescription checks
-backend/           # Reserved for Django API
+backend/           # Django API, account/order data, rider authorization and dispatch
 database/          # Reserved for database planning/data
 docs/
 sample_screens/    # Original design references
 ```
 
-Django's own migrations will live with its apps when backend implementation starts. The earlier empty backend route/controller folders are placeholders, not the final Django layout.
+Backend setup and API notes are in `backend/README.md`; rider workflow instructions are in `docs/RIDER_PORTAL.md`.
 
 ### Validate
 
@@ -62,9 +62,13 @@ npm run typecheck
 npm run build:web
 ```
 
-Prescription flow implementation is in `docs/MILESTONE_3_PRESCRIPTIONS.md`. AI recognition is excluded. Checkout and simulated orders are complete for this preview; see docs/MILESTONE_1_CHECKOUT.md and docs/MILESTONE_2_ORDERS.md. The next milestone is customer account/profile screens and persistent sessions, followed by the Django/PostgreSQL backend.
+Prescription flow implementation is in `docs/MILESTONE_3_PRESCRIPTIONS.md`. AI recognition is excluded. Checkout and simulated orders are described in docs/MILESTONE_1_CHECKOUT.md and docs/MILESTONE_2_ORDERS.md. Rider implementation and its current integration limits are in docs/RIDER_PORTAL.md.
 
 
 ## Customer design update
 
 The existing customer screens now use locally bundled Inter fonts, the custom SVG icons, a compact search-focused Home, and medicine/pharmacy rows with separators. See docs/DESIGN_UPDATE.md for the changes, validation, and device-testing limits. Edit icons in frontend/assets/svg and run node scripts/sync-icons.mjs from frontend to refresh the registry.
+
+## Rider portal
+
+A rider sign-in and delivery workflow is available at `/rider/login`. Rider accounts are created and approved in Django admin, and assignments are made manually after pharmacy readiness is verified. See [docs/RIDER_PORTAL.md](docs/RIDER_PORTAL.md) for setup, lifecycle, and integration limits. The preview still has no automatic pharmacy dispatch, live tracking, push notifications, or payment settlement.

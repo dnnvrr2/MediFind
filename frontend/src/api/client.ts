@@ -3,6 +3,13 @@ import * as SecureStore from 'expo-secure-store';
 
 export type ApiCustomer = { id: number; email: string; full_name: string; phone: string };
 export type ApiSession = { customer: ApiCustomer; access: string; refresh: string };
+export type Rider = { id: number; email: string; full_name: string; phone: string; vehicle: string; available: boolean };
+export type RiderDelivery = {
+  id: string; order_reference: string; status: string; status_label: string; customer_name: string; customer_phone: string;
+  delivery_address: Record<string, string>; pharmacy_name: string; pharmacy_address: string; payment_method: string;
+  amount_due: string; cash_collected: boolean; proof_uploaded: boolean; notes: string;
+  events: { status: string; note: string; created_at: string }[]; created_at: string; updated_at: string;
+};
 let accessToken = '';
 let refreshToken = '';
 const REFRESH_KEY = 'medifind.refresh';
@@ -74,6 +81,26 @@ async function restoreSession() {
 export const api = {
   register: (payload: { email: string; password: string; full_name: string; phone: string }) => request<ApiSession>('/api/auth/register/', { method: 'POST', body: JSON.stringify(payload) }, false),
   login: (payload: { email: string; password: string }) => request<ApiSession>('/api/auth/token/', { method: 'POST', body: JSON.stringify(payload) }, false),
+  riderLogin: (payload: { email: string; password: string }) => request<{ rider: Rider; access: string; refresh: string }>('/api/rider/token/', { method: 'POST', body: JSON.stringify(payload) }, false),
+  riderMe: () => request<Rider>('/api/rider/me/'),
+  riderSetAvailability: (available: boolean) => request<Rider>('/api/rider/me/', { method: 'PATCH', body: JSON.stringify({ available }) }),
+  riderDeliveries: (bucket = 'all') => request<RiderDelivery[]>(`/api/rider/deliveries/${bucket === 'all' ? '' : `?bucket=${bucket}`}`),
+  riderAction: (id: string, payload: Record<string, string | boolean>, proof?: { uri: string; name: string; mimeType: string }) => {
+    if (!proof) return request<RiderDelivery>(`/api/rider/deliveries/${encodeURIComponent(id)}/action/`, { method: 'POST', body: JSON.stringify(payload) });
+    const body = new FormData();
+    for (const [key, value] of Object.entries(payload)) body.append(key, String(value));
+    body.append('proof', { uri: proof.uri, name: proof.name, type: proof.mimeType } as unknown as Blob);
+    return request<RiderDelivery>(`/api/rider/deliveries/${encodeURIComponent(id)}/action/`, { method: 'POST', body });
+  },
+  riderReportIssue: (id: string, payload: { reason: string; details: string }, photo?: { uri: string; name: string; mimeType: string }) => {
+    if (!photo) return request<{ issue: { id: number; reason: string; details: string }; delivery: RiderDelivery }>(`/api/rider/deliveries/${encodeURIComponent(id)}/issues/`, { method: 'POST', body: JSON.stringify(payload) });
+    const body = new FormData();
+    body.append('reason', payload.reason);
+    body.append('details', payload.details);
+    body.append('photo', { uri: photo.uri, name: photo.name, type: photo.mimeType } as unknown as Blob);
+    return request<{ issue: { id: number; reason: string; details: string }; delivery: RiderDelivery }>(`/api/rider/deliveries/${encodeURIComponent(id)}/issues/`, { method: 'POST', body });
+  },
+  customerDeliveryCode: (orderRef: string) => request<{ code: string; delivery_status: string }>(`/api/customer/orders/${encodeURIComponent(orderRef)}/delivery-code/`),
   me: () => request<ApiCustomer>('/api/auth/me/'),
   updateMe: (payload: { full_name: string; phone: string }) => request<ApiCustomer>('/api/auth/me/', { method: 'PATCH', body: JSON.stringify(payload) }),
   logout: async () => { if (refreshToken) await request<void>('/api/auth/logout/', { method: 'POST', body: JSON.stringify({ refresh: refreshToken }) }, false).catch(() => undefined); await clearSession(); },
