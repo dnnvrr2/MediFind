@@ -1,0 +1,146 @@
+[
+    {
+        "viewBox":  "0 0 24 24",
+        "name":  "home",
+        "file":  "icons/home.svg",
+        "strokeWidth":  1.8
+    },
+    {
+        "viewBox":  "0 0 24 24",
+        "name":  "search",
+        "file":  "icons/search.svg",
+        "strokeWidth":  1.8
+    },
+    {
+        "viewBox":  "0 0 24 24",
+        "name":  "pharmacy",
+        "file":  "icons/pharmacy.svg",
+        "strokeWidth":  1.8
+    },
+    {
+        "viewBox":  "0 0 24 24",
+        "name":  "medicine",
+        "file":  "icons/medicine.svg",
+        "strokeWidth":  1.8
+    },
+    {
+        "viewBox":  "0 0 24 24",
+        "name":  "cart",
+        "file":  "icons/cart.svg",
+        "strokeWidth":  1.8
+    },
+    {
+        "viewBox":  "0 0 24 24",
+        "name":  "prescription",
+        "file":  "icons/prescription.svg",
+        "strokeWidth":  1.8
+    },
+    {
+        "viewBox":  "0 0 24 24",
+        "name":  "orders",
+        "file":  "icons/orders.svg",
+        "strokeWidth":  1.8
+    },
+    {
+        "viewBox":  "0 0 24 24",
+        "name":  "profile",
+        "file":  "icons/profile.svg",
+        "strokeWidth":  1.8
+    },
+    {
+        "viewBox":  "0 0 24 24",
+        "name":  "map-pin",
+        "file":  "icons/map-pin.svg",
+        "strokeWidth":  1.8
+    },
+    {
+        "viewBox":  "0 0 24 24",
+        "name":  "back",
+        "file":  "icons/back.svg",
+        "strokeWidth":  1.8
+    },
+    {
+        "viewBox":  "0 0 24 24",
+        "name":  "arrow-right",
+        "file":  "icons/arrow-right.svg",
+        "strokeWidth":  1.8
+    },
+    {
+        "viewBox":  "0 0 24 24",
+        "name":  "plus",
+        "file":  "icons/plus.svg",
+        "strokeWidth":  1.8
+    },
+    {
+        "viewBox":  "0 0 24 24",
+        "name":  "minus",
+        "file":  "icons/minus.svg",
+        "strokeWidth":  1.8
+    },
+    {
+        "viewBox":  "0 0 24 24",
+        "name":  "close",
+        "file":  "icons/close.svg",
+        "strokeWidth":  1.8
+    },
+    {
+        "viewBox":  "0 0 24 24",
+        "name":  "check",
+        "file":  "icons/check.svg",
+        "strokeWidth":  1.8
+    },
+    {
+        "viewBox":  "0 0 24 24",
+        "name":  "alert",
+        "file":  "icons/alert.svg",
+        "strokeWidth":  1.8
+    },
+    {
+        "viewBox":  "0 0 24 24",
+        "name":  "clock",
+        "file":  "icons/clock.svg",
+        "strokeWidth":  1.8
+    },
+    {
+        "viewBox":  "0 0 24 24",
+        "name":  "filter",
+        "file":  "icons/filter.svg",
+        "strokeWidth":  1.8
+    },
+    {
+        "viewBox":  "0 0 24 24",
+        "name":  "upload",
+        "file":  "icons/upload.svg",
+        "strokeWidth":  1.8
+    },
+    {
+        "viewBox":  "0 0 24 24",
+        "name":  "camera",
+        "file":  "icons/camera.svg",
+        "strokeWidth":  1.8
+    },
+    {
+        "viewBox":  "0 0 24 24",
+        "name":  "delivery",
+        "file":  "icons/delivery.svg",
+        "strokeWidth":  1.8
+    },
+    {
+        "viewBox":  "0 0 24 24",
+        "name":  "pickup",
+        "file":  "icons/pickup.svg",
+        "strokeWidth":  1.8
+    },
+    {
+        "viewBox":  "0 0 24 24",
+        "name":  "trash",
+        "file":  "icons/trash.svg",
+        "strokeWidth":  1.8
+    },
+    {
+        "viewBox":  "0 0 24 24",
+        "name":  "location",
+        "file":  "icons/location.svg",
+        "strokeWidth":  1.8
+    }
+]

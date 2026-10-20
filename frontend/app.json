@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "version": "0.1.0",
+    "scheme": "medifind",
+    "plugins": [
+      "expo-router",
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Allow MediFind to take a prescription photo for local preview.",
+          "microphonePermission": false,
+          "photosPermission": false
+        }
+      ],
+      "expo-secure-store"
+    ],
+    "name": "MediFind",
+    "userInterfaceStyle": "light",
+    "slug": "medicine-search-ordering",
+    "experiments": {
+      "typedRoutes": true
+    },
+    "web": {
+      "output": "single"
+    }
+  }
+}
