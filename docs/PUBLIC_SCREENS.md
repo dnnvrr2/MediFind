@@ -8,7 +8,7 @@ Customer routes (cart, checkout, prescriptions, orders, profile editing) require
 
 Authentication screens include field validation, password visibility, password confirmation, and submission loading protection. The password rule remains a minimum of eight characters. Registration creates customer accounts only. Forgot password keeps the current return destination when returning to sign-in.
 
-Search retains query/filter route parameters and saves scroll position per query/filter for return navigation. Help, Privacy, and Terms are available from the footer; policy content is clearly a draft until the operator supplies identity, support, retention/deletion, and applicable service terms.
+Search retains query/filter route parameters and saves scroll position per query/filter for return navigation. Help, Privacy, and Terms are available at the bottom of the customer, rider, and admin Profile screens; policy content is clearly a draft until the operator supplies identity, support, retention/deletion, and applicable service terms.
 
 ## Validation
 
@@ -16,4 +16,6 @@ TypeScript checking, the frontend domain tests (including public-route protectio
 
 The root URL `/` always renders the guest landing and public navigation, even when an account session is restored. Customer Home is `/home`, requires sign-in, and is the default destination after sign-in or registration. Explicit return links still resume the intended customer action.
 
-The home search banner uses a larger two-line heading, readable supporting copy, a contrasting white search button, and quieter popular-search chips. Change location opens a manual city/barangay/street selector with sample-area suggestions. The selected area filters Home pharmacy cards, the pharmacy directory, and medicine availability. Unsupported areas show an empty state. The area is kept in app state and web tab session storage, separately from the checkout delivery address. GPS and live inventory remain unavailable.
+The home search banner uses a larger two-line heading, readable supporting copy, a contrasting white search button, and quieter popular-search chips. Change location opens a manual city/barangay/street selector with sample-area suggestions. The selected area filters Home pharmacy cards, the pharmacy directory, and medicine availability. Unsupported areas show an empty state. The area is kept in app state and web tab session storage, separately from the checkout delivery address. Use my location supports foreground device detection within CDO. The picker has no map; maps appear on pharmacy details, order tracking, and rider delivery details. Live inventory and rider GPS tracking remain unavailable.
+
+Mobile popular-search chips stay on one horizontal row, with scrolling available on narrow screens. Navigation labels use one line and the same weight in active/inactive states to prevent Prescriptions wrapping when selected. The global Help/Privacy/Terms footer has been removed.

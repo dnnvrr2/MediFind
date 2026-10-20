@@ -6,7 +6,7 @@ import { money } from '../data/catalog';
 import { Back, Badge, Button, Card, Text, s } from './ui';
 
 export function OrderHeading({ order, title }: { order: DemoOrder; title: string }) {
-  return <><Back title={title} onBack={() => router.navigate({ pathname: '/orders', params: { tab: isCurrentOrder(order) ? 'current' : 'previous' } })} /><View style={{ gap: 6 }}><Badge text="Demo order · session only" neutral /><Text style={s.heading}>#{order.id}</Text><Text style={s.muted}>{orderTime(order.createdAt)}</Text></View></>;
+  return <><Back title={title} onBack={() => router.navigate({ pathname: '/orders', params: { tab: isCurrentOrder(order) ? 'current' : 'previous' } })} /><View style={{ gap: 6 }}><Badge text={order.managed ? "Pharmacy order" : "Demo order"} neutral /><Text style={s.heading}>#{order.id}</Text><Text style={s.muted}>{orderTime(order.createdAt)}</Text></View></>;
 }
 
 export function OrderItems({ order }: { order: DemoOrder }) {
@@ -24,5 +24,5 @@ export function OrderDestination({ order }: { order: DemoOrder }) {
 }
 
 export function MissingOrder() {
-  return <><Back title="Demo order not found" onBack={() => router.replace('/orders')} /><Card><Text style={s.text}>This order is not in the current app session.</Text><Text style={s.muted}>Refreshing or restarting clears demo orders. No order is stored by a pharmacy.</Text><Button title="My Orders" onPress={() => router.replace('/orders')} /></Card></>;
+  return <><Back title="Demo order not found" onBack={() => router.replace('/orders')} /><Card><Text style={s.text}>This order is not in the current app session.</Text><Text style={s.muted}>Refresh your saved orders or return to the order list.</Text><Button title="My Orders" onPress={() => router.replace('/orders')} /></Card></>;
 }

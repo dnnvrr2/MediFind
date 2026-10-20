@@ -5,7 +5,7 @@ import { useCart } from '../state/cart';
 import { useCheckout } from '../state/checkout';
 import { useOrders } from '../state/orders';
 import { addressText, quoteCheckout, validateCheckout, type Fulfillment } from '../domain/checkout';
-import { money } from '../data/catalog';
+import { useCatalog, money } from '../data/catalog';
 import { Page, Back, Card, Button, TextLink, Badge, Text, colors, s } from '../components/ui';
 import { Icon, type IconName } from '../components/icon';
 import { CheckoutField } from '../components/checkout-field';
@@ -13,6 +13,7 @@ import { AddressEditor } from '../components/address-editor';
 import { CheckoutSummary } from '../components/checkout-summary';
 
 export default function Checkout() {
+  useCatalog();
   const { items, setItems } = useCart();
   const { draft, setDraft } = useCheckout();
   const { placeOrder, approvals } = useOrders();
@@ -58,7 +59,7 @@ export default function Checkout() {
   ];
   return <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
     <Page scrollRef={scrollRef}><Back title={review ? 'Review checkout' : 'Checkout'} onBack={review ? editDetails : undefined} />
-      <View style={{ gap: 8 }}><Badge text="Checkout preview" neutral /><Text style={s.muted}>{review ? 'Step 2 of 2 · Review your details. Nothing has been submitted.' : 'Step 1 of 2 · Choose how to receive your items. Use sample contact details.'}</Text></View>
+      <View style={{ gap: 8 }}><Badge text={quote.pharmacy.live ? "Pharmacy checkout" : "Checkout preview"} neutral={!quote.pharmacy.live} /><Text style={s.muted}>{review ? 'Step 2 of 2 - Review' : 'Step 1 of 2 - Delivery or pickup'}</Text></View>
       <View style={{ flexDirection: wide ? 'row' : 'column', gap: 24, alignItems: 'flex-start' }}>
         <View style={{ flex: wide ? 1 : undefined, width: wide ? undefined : '100%', gap: 24 }}>
           <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}><Icon name="pharmacy" color={colors.muted} /><View style={{ flex: 1, gap: 4 }}><Text style={s.caption}>Your selected pharmacy</Text><Text style={s.heading}>{quote.pharmacy.name}</Text><Text style={s.muted}>{quote.pharmacy.address}</Text></View></View>
@@ -76,7 +77,7 @@ export default function Checkout() {
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}><Icon name={method.icon} color={selected ? colors.teal : colors.muted} /><Text style={{ fontWeight: '600', flex: 1 }}>{method.title}</Text>{selected && <Icon name="check" size={18} />}</View><Text style={s.muted}>{method.description}</Text>
               </Pressable>;
             })}</View></View>
-            <Card><Text accessibilityRole="header" style={s.heading}>Recipient details</Text><Text style={s.muted}>Required for both pickup and delivery.</Text>
+            <Card><Text accessibilityRole="header" style={s.heading}>Recipient details</Text>
               <CheckoutField ref={nameRef} label="Full name *" value={draft.name} onChangeText={name => setDraft(previous => ({ ...previous, name }))} error={errors.name} maxLength={100} autoCapitalize="words" returnKeyType="next" onSubmitEditing={() => phoneRef.current?.focus()} />
               <CheckoutField ref={phoneRef} label="Mobile number *" placeholder="09XXXXXXXXX or +639XXXXXXXXX" value={draft.phone} onChangeText={phone => setDraft(previous => ({ ...previous, phone }))} error={errors.phone} maxLength={24} keyboardType="phone-pad" autoCorrect={false} autoCapitalize="none" returnKeyType="done" />
             </Card>
@@ -88,14 +89,14 @@ export default function Checkout() {
               </>}
             </Card>
           </>}
-          <Card><Text accessibilityRole="header" style={s.heading}>Payment</Text><Text style={{ fontWeight: '600' }}>{quote.payment}</Text><Text style={s.muted}>{draft.method === 'delivery' ? 'Pay in cash when the order is delivered.' : 'Pay when collecting from the selected pharmacy.'} No online payment or card details are collected.</Text></Card>
+          <Card><Text accessibilityRole="header" style={s.heading}>Payment</Text><Text style={{ fontWeight: '600' }}>{quote.payment}</Text><Text style={s.muted}>{draft.method === 'delivery' ? 'Cash on delivery.' : 'Pay at pickup.'}</Text></Card>
         </View>
         <View style={{ width: wide ? 320 : '100%', gap: 16 }}>
           <CheckoutSummary quote={quote} />
-          {review ? <><Card><Text style={s.heading}>Create order preview</Text><Text style={s.muted}>This saves a simulated order to your account when signed in. It does not reserve stock, charge you, or contact the pharmacy.</Text><Button title="Place order preview" icon="check" onPress={submit} />{!!submitError && <Text accessibilityRole="alert" style={{ color: colors.danger }}>{submitError}</Text>}</Card><Button title="Edit checkout details" secondary onPress={editDetails} /><TextLink title="Back to cart" onPress={() => router.push('/cart')} /></> : <>
+          {review ? <><Card><Text style={s.heading}>{quote.pharmacy.live ? "Submit to pharmacy" : "Create order preview"}</Text><Text style={s.muted}>{quote.pharmacy.live ? "The pharmacy must accept your order before stock is reserved. Payment is collected at pickup or delivery." : "Saves a preview only. No stock is reserved, payment collected, or pharmacy contacted."}</Text><Button title={quote.pharmacy.live ? "Submit order" : "Place order preview"} icon="check" onPress={submit} />{!!submitError && <Text accessibilityRole="alert" style={{ color: colors.danger }}>{submitError}</Text>}</Card><Button title="Edit checkout details" secondary onPress={editDetails} /><TextLink title="Back to cart" onPress={() => router.push('/cart')} /></> : <>
             <Button title="Review checkout" icon="arrow-right" onPress={showReview} />
             {!!Object.keys(errors).length && <Text accessibilityRole="alert" style={{ color: colors.danger, fontSize: 14, lineHeight: 22 }}>Check the highlighted fields before continuing.</Text>}
-            <Text style={s.caption}>Details stay while you navigate within this app session. Refreshing or restarting clears the cart and checkout draft.</Text>
+            <Text style={s.caption}>Refreshing clears your cart and checkout details.</Text>
           </>}
         </View>
       </View>

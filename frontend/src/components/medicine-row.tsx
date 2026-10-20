@@ -13,7 +13,7 @@ export function MedicineRow({ medicine: m, onPress, last = false, price, stock, 
       <Text style={{ fontSize: 17, lineHeight: 25, fontWeight: '600' }}>{m.name}</Text>
       <Text style={s.muted}>{m.strength} · {m.form}</Text>
       <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-        <Badge text={m.prescription ? 'Rx only' : 'OTC'} warning={m.prescription} neutral={!m.prescription} />
+        <Badge text={m.live ? 'Pharmacy listing' : 'Sample'} neutral={!m.live} /><Badge text={m.prescription ? 'Rx only' : 'OTC'} warning={m.prescription} neutral={!m.prescription} />
         {price && <Text style={{ fontSize: 14, lineHeight: 22, fontWeight: '600', fontVariant: ['tabular-nums'] }}>{price} / {m.unit}</Text>}
         {stock !== undefined && <Text style={s.caption}>{stock ? `${stock} available` : 'Out of stock'}</Text>}
       </View>

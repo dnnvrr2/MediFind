@@ -50,13 +50,15 @@ export function OrdersProvider({ children }: PropsWithChildren) {
   const placeOrder: OrdersContext['placeOrder'] = async (items, draft, key) => {
     const result = createDemoOrder(latest.current, items, draft, key, Date.now(), grants);
     if (!result.ok || !profile) return commit(result);
-    try { await api.saveOrder(result.order.id, result.order); setSyncIssue(''); return commit(result); }
+    try { const saved = await api.saveOrder(result.order.id, result.order); const order = saved.data; setSyncIssue(''); return commit({ ...result, order, state: { ...result.state, orders: [order, ...result.state.orders.filter(row => row.id !== order.id)] } }); }
     catch (error) { return { ok: false, state: latest.current, issue: error instanceof ApiError ? error.message : 'Could not save this order to your account. Please try again.' }; }
   };
   const updateOrder: OrdersContext['updateOrder'] = async (id, status, note = '') => {
+    const original = latest.current.orders.find(order => order.id === id);
+    if (original?.managed && status !== 'cancelled') return { ok: false, state: latest.current, issue: 'Only the pharmacy or assigned rider can update this order.' };
     const result = transitionDemoOrder(latest.current, id, status, note, Date.now());
     if (!result.ok || !profile) return commit(result);
-    try { await api.saveOrder(result.order.id, result.order); setSyncIssue(''); return commit(result); }
+    try { const saved = await api.saveOrder(result.order.id, result.order); const order = saved.data; setSyncIssue(''); return commit({ ...result, order, state: { ...result.state, orders: [order, ...result.state.orders.filter(row => row.id !== order.id)] } }); }
     catch (error) { return { ok: false, state: latest.current, issue: error instanceof ApiError ? error.message : 'Could not save the order update. Please try again.' }; }
   };
   const refreshOrders = async () => {

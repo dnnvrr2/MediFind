@@ -1,8 +1,8 @@
 import { createContext, useContext, useEffect, useState, type PropsWithChildren } from 'react';
 import { ApiError, api, clearSession, hasSession, setSession, type ApiCustomer, type ApiSession } from '../api/client';
 
-export type CustomerProfile = { fullName: string; email: string; phone: string };
-type ProfileResult = { ok: true } | { ok: false; issue: string };
+export type CustomerProfile = { fullName: string; email: string; phone: string; isStaff?: boolean };
+type ProfileResult = { ok: true; isStaff: boolean } | { ok: false; issue: string };
 type ProfileContext = {
   profile: CustomerProfile | null;
   ready: boolean;
@@ -14,7 +14,7 @@ type ProfileContext = {
 const Context = createContext<ProfileContext | null>(null);
 const validEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 const validProfile = (profile: CustomerProfile) => profile.fullName.trim().length >= 2 && validEmail(profile.email) && (!profile.phone.trim() || /^09\d{9}$|^\+639\d{9}$/.test(profile.phone.trim().replace(/[\s().-]/g, '')));
-const fromApi = (value: ApiCustomer): CustomerProfile => ({ fullName: value.full_name, email: value.email, phone: value.phone });
+const fromApi = (value: ApiCustomer): CustomerProfile => ({ fullName: value.full_name, email: value.email, phone: value.phone, isStaff: value.is_staff === true });
 const issueOf = (error: unknown) => error instanceof ApiError ? error.message : 'Could not connect to your account. Please try again.';
 
 export function ProfileProvider({ children }: PropsWithChildren) {
@@ -31,12 +31,12 @@ export function ProfileProvider({ children }: PropsWithChildren) {
       try {
         const session = await api.register({ email: value.email.trim().toLowerCase(), password, full_name: value.fullName.trim(), phone: value.phone.trim() });
         await accept(session);
-        return { ok: true };
+        return { ok: true, isStaff: session.customer.is_staff === true };
       } catch (error) { return { ok: false, issue: issueOf(error) }; }
     },
     signIn: async (email, password) => {
       if (!validEmail(email) || password.length < 8) return { ok: false, issue: 'Enter a valid email and a password with at least 8 characters.' };
-      try { const session = await api.login({ email: email.trim().toLowerCase(), password }); await accept(session); return { ok: true }; }
+      try { const session = await api.login({ email: email.trim().toLowerCase(), password }); await accept(session); return { ok: true, isStaff: session.customer.is_staff === true }; }
       catch (error) { return { ok: false, issue: issueOf(error) }; }
     },
     update: async value => {
@@ -45,7 +45,7 @@ export function ProfileProvider({ children }: PropsWithChildren) {
       try {
         const updated = await api.updateMe({ full_name: value.fullName.trim(), phone: value.phone.trim() });
         setProfile(fromApi(updated));
-        return { ok: true };
+        return { ok: true, isStaff: updated.is_staff === true };
       } catch (error) { return { ok: false, issue: issueOf(error) }; }
     },
     signOut: async () => { await api.logout(); await clearSession(); setProfile(null); },

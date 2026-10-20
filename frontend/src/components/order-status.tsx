@@ -15,7 +15,7 @@ export function OrderStatusPanel({ order }: { order: DemoOrder }) {
   const note = order.events[order.events.length - 1]?.note;
   return <View style={{ borderWidth: 1, borderColor: colors.line, borderRadius: 10, padding: 16, backgroundColor: colors.white, gap: 12 }}>
     <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}><Icon name={info.tone === 'danger' ? 'alert' : order.status === 'delivered' || order.status === 'collected' ? 'check' : 'clock'} color={info.tone === 'danger' ? colors.danger : colors.teal} /><OrderStatusBadge status={order.status} /></View>
-    <Text style={s.text}>{info.description}</Text>
+    <Text style={s.text}>{order.managed ? (order.status === 'awaiting_confirmation' ? 'Waiting for the pharmacy to accept.' : order.status === 'ready_for_collection' ? 'The pharmacy is arranging rider collection.' : 'Updated by the pharmacy or assigned rider.') : info.description}</Text>
     {['cancelled', 'rejected', 'delivery_failed'].includes(order.status) && !!note && <Text style={s.muted}>Reason: {note}</Text>}
   </View>;
 }

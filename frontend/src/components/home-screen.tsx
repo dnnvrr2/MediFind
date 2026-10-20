@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Pressable, useWindowDimensions } from 'react-native';
+import { View, Pressable, ScrollView, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 import { Page, Search, TextLink, colors, Text, s } from '../components/ui';
 import { Icon } from '../components/icon';
@@ -8,9 +8,10 @@ import { LocationPicker } from './location-picker';
 import { useLocation } from '../state/location';
 import { matchesArea } from '../domain/locations';
 import { useProfile } from '../state/profile';
-import { medicines, pharmacies } from '../data/catalog';
+import { useCatalog, medicines, pharmacies } from '../data/catalog';
 
 export function HomeScreen({ guest = false }: { guest?: boolean }) {
+  useCatalog();
   const { profile } = useProfile();
   const { area } = useLocation();
   const localPharmacies = pharmacies.filter(p => matchesArea(p.address, area));
@@ -23,20 +24,20 @@ export function HomeScreen({ guest = false }: { guest?: boolean }) {
       <LocationPicker onDark />
       <View style={{ gap: 8 }}>
         <Text accessibilityRole="header" style={{ fontSize: wide ? 30 : 28, lineHeight: 38, fontWeight: '700', letterSpacing: -0.8, color: colors.white }}>Find your medicine before you walk out the door</Text>
-        <Text style={{ color: '#E0F0EC', fontSize: 16, lineHeight: 24 }}>Search by name or generic and compare sample pharmacy prices and stock.</Text>
+        <Text style={{ color: '#E0F0EC', fontSize: 16, lineHeight: 24 }}>Compare pharmacy prices and stock.</Text>
       </View>
       <View><Search value={query} onChange={setQuery} onSubmit={() => search()} inline={wide} onDark /></View>
-      <View style={[s.row, { gap: 10 }]}><Text style={{ color: '#E0F0EC', fontSize: 14, lineHeight: 22 }}>Popular searches</Text>{['Paracetamol', 'Cetirizine'].map(t => <Pressable key={t} accessibilityRole="button" onPress={() => search(t)} style={({ pressed }) => ({ borderWidth: 1, borderColor: '#86BDB2', borderRadius: 22, paddingHorizontal: 16, minHeight: 44, justifyContent: 'center', backgroundColor: pressed ? '#064E46' : '#0A6258' })}><Text style={{ color: colors.white, fontSize: 14, lineHeight: 22, fontWeight: '500' }}>{t}</Text></Pressable>)}</View>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}><Text numberOfLines={1} style={{ flexShrink: 0, color: '#E0F0EC', fontSize: 13, lineHeight: 22 }}>Common</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1, minWidth: 0 }} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>{['Paracetamol', 'Cetirizine'].map(t => <Pressable key={t} accessibilityRole="button" onPress={() => search(t)} style={({ pressed }) => ({ borderWidth: 1, borderColor: '#86BDB2', borderRadius: 22, paddingHorizontal: 12, minHeight: 44, justifyContent: 'center', backgroundColor: pressed ? '#064E46' : '#0A6258' })}><Text numberOfLines={1} style={{ color: colors.white, fontSize: 13, lineHeight: 22, fontWeight: '500' }}>{t}</Text></Pressable>)}</ScrollView></View>
     </View>
     <View style={{ gap: 12 }}>
       <Pressable accessibilityRole="link" onPress={() => router.push('/pharmacies')} style={({ pressed }) => [s.card, { flexDirection: 'row', alignItems: 'center', gap: 16, backgroundColor: pressed ? colors.pale : colors.white }]}>
         <View style={{ width: 48, height: 48, borderRadius: 12, backgroundColor: colors.pale, alignItems: 'center', justifyContent: 'center' }}><Icon name="pharmacy" size={25} color={colors.teal} /></View>
-        <View style={{ flex: 1, gap: 6 }}><Text style={s.heading}>Browse pharmacies</Text><Text style={s.muted}>Explore sample pharmacy listings for {area}.</Text></View>
+        <View style={{ flex: 1, gap: 6 }}><Text style={s.heading}>Browse pharmacies</Text></View>
         <Icon name="arrow-right" size={20} color={colors.muted} />
       </Pressable>
       <Pressable accessibilityRole="link" onPress={() => router.push(guest ? { pathname: '/account/sign-in', params: { returnTo: '/prescriptions/upload' } } : '/prescriptions/upload')} style={({ pressed }) => [s.card, { flexDirection: 'row', alignItems: 'center', gap: 16, backgroundColor: pressed ? colors.pale : colors.white }]}>
         <View style={{ width: 48, height: 48, borderRadius: 12, backgroundColor: colors.pale, alignItems: 'center', justifyContent: 'center' }}><Icon name="prescription" size={25} color={colors.teal} /></View>
-        <View style={{ flex: 1, gap: 6 }}><Text style={s.heading}>Have a prescription?</Text><Text style={s.muted}>{customer ? 'Upload a readable file to your account.' : 'Sign in to upload a prescription.'} A pharmacist must review it before fulfillment.</Text></View>
+        <View style={{ flex: 1, gap: 6 }}><Text style={s.heading}>Have a prescription?</Text><Text style={s.muted}>{customer ? 'Upload for simulated review.' : 'Sign in to upload.'}</Text></View>
         <Icon name="arrow-right" size={20} color={colors.muted} />
       </Pressable>
     </View>
@@ -52,6 +53,6 @@ export function HomeScreen({ guest = false }: { guest?: boolean }) {
         </Pressable>)}</View>
       </View>
     </View>
-    <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10, paddingTop: 4 }}><Icon name="prescription" size={20} color={colors.muted} /><Text style={[s.muted, { flex: 1 }]}>Prescription medicines need pharmacist review. Explore local file upload and simulated review in Prescriptions.</Text></View>
+    {guest && <TextLink title="Pharmacy portal" icon="pharmacy" onPress={() => router.push('/partner')} />}
   </Page>;
 }

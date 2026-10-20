@@ -5,7 +5,7 @@ import { Icon } from './icon';
 
 export function OrderTimeline({ order }: { order: DemoOrder }) {
   const steps = timelineSteps(order.method);
-  return <Card><Text accessibilityRole="header" style={s.heading}>Order progress</Text><Text style={s.caption}>Updates are simulated using the preview controls below.</Text>
+  return <Card><Text accessibilityRole="header" style={s.heading}>Order progress</Text>
     {steps.map((step, index) => {
       const event = order.events.find(event => event.status === step.status);
       const active = order.status === step.status;

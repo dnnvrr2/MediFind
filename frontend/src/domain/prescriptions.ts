@@ -3,7 +3,7 @@ import { medicines, pharmacies, offers } from '../data/catalog.ts';
 export type PrescriptionFile = { uri: string; name: string; mimeType: string; size: number };
 export type RequestLine = { medicineId: string; quantity: number };
 export type PrescriptionStatus = 'draft' | 'pending' | 'approved' | 'partially_approved' | 'rejected' | 'needs_clearer_photo';
-export type Prescription = { id: string; revision: number; createdAt: number; updatedAt: number; file: PrescriptionFile; status: PrescriptionStatus; requested: RequestLine[]; pharmacyId: string; approved: RequestLine[]; note: string };
+export type Prescription = { managed?: boolean; id: string; revision: number; createdAt: number; updatedAt: number; file: PrescriptionFile; status: PrescriptionStatus; requested: RequestLine[]; pharmacyId: string; approved: RequestLine[]; note: string };
 export type Approval = { prescriptionId: string; revision: number; pharmacyId: string; medicineId: string; quantity: number; reviewedAt: number };
 export const prescriptionLabels: Record<PrescriptionStatus, string> = { draft: 'Draft', pending: 'Awaiting review', approved: 'Approved · demo', partially_approved: 'Partially approved · demo', rejected: 'Rejected · demo', needs_clearer_photo: 'Clearer photo needed' };
 export function fileIssue(file: PrescriptionFile): string {
@@ -29,12 +29,14 @@ export function pharmacyEstimate(lines: RequestLine[], pharmacyId: string) {
 export type PrescriptionResult = { ok: true; record: Prescription } | { ok: false; issue: string };
 export function submitPrescription(record: Prescription, at: number): PrescriptionResult {
   if (record.status !== 'draft') return { ok: false, issue: 'This prescription has already been submitted. Replace the file to begin another review.' };
-  const issue = fileIssue(record.file) || requestIssue(record.requested);
+  const selectedPharmacy = pharmacies.find(p => p.id === record.pharmacyId);
+  const issue = fileIssue(record.file) || ((!selectedPharmacy?.live || record.requested.length) ? requestIssue(record.requested) : '');
   if (issue) return { ok: false, issue };
-  if (!pharmacies.some(p => p.id === record.pharmacyId) || !pharmacyEstimate(record.requested, record.pharmacyId).any) return { ok: false, issue: 'Select a pharmacy with at least one available sample item.' };
-  return { ok: true, record: { ...record, requested: record.requested.map(l => ({ ...l })), status: 'pending', approved: [], note: '', updatedAt: at } };
+  if (!selectedPharmacy || (selectedPharmacy.live ? !selectedPharmacy.isOpen : !pharmacyEstimate(record.requested, record.pharmacyId).any)) return { ok: false, issue: 'Select a pharmacy with at least one available sample item.' };
+  return { ok: true, record: { ...record, managed: pharmacies.some(p => p.id === record.pharmacyId && p.live), requested: record.requested.map(l => ({ ...l })), status: 'pending', approved: [], note: '', updatedAt: at } };
 }
 export function reviewPrescription(record: Prescription, outcome: 'approved' | 'partially_approved' | 'rejected' | 'needs_clearer_photo', lines: RequestLine[], note: string, at: number): PrescriptionResult {
+  if (record.managed) return { ok: false, issue: 'This prescription must be reviewed by the assigned pharmacist.' };
   if (record.status !== 'pending') return { ok: false, issue: 'Only a pending prescription can be reviewed.' };
   if (!['approved', 'partially_approved', 'rejected', 'needs_clearer_photo'].includes(outcome)) return { ok: false, issue: 'Choose a review outcome.' };
   const accepts = outcome === 'approved' || outcome === 'partially_approved';

@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Slot, router, usePathname } from 'expo-router';
+import { Slot, router, usePathname, useGlobalSearchParams } from 'expo-router';
 import { View, Pressable, useWindowDimensions, ActivityIndicator, Text as NativeText } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -15,12 +15,17 @@ import { FontsReady } from '../components/typography';
 import { useProfile } from '../state/profile';
 import { LocationProvider } from '../state/location';
 import { needsCustomer } from '../domain/public-access';
+import { PortalNavigation } from '../components/portal-navigation';
+import { CatalogProvider } from '../state/catalog';
 
 function Shell() {
   const wide = useWindowDimensions().width >= 760;
   const pathname = usePathname();
+  const { tab: adminTab } = useGlobalSearchParams<{ tab?: string }>();
   const { items } = useCart();
+  const adminMode = pathname === '/admin' || pathname.startsWith('/admin/');
   const riderMode = pathname.startsWith('/rider');
+  const partnerMode = pathname === '/partner' || pathname.startsWith('/partner/');
   const { ready: profileReady, profile } = useProfile();
   const guestMode = pathname === '/' || !profile;
   const restricted = !riderMode && !profile && needsCustomer(pathname);
@@ -39,14 +44,23 @@ function Shell() {
     { path: '/pharmacies', label: 'Pharmacies', icon: 'pharmacy' }, { path: '/account/sign-in', label: 'Login', icon: 'profile' },
   ];
   const destinations = riderMode ? riderDestinations : guestMode ? guestDestinations : customerDestinations;
-  const nav = <View accessibilityRole="tablist" style={{ flexDirection: 'row', gap: wide ? 8 : 0, justifyContent: 'space-around' }}>{destinations.map(n => {
+  const adminDestinations: { key: string; label: string; icon: IconName }[] = [
+    { key: 'dashboard', label: 'Dashboard', icon: 'home' },
+    { key: 'pharmacies', label: 'Pharmacies', icon: 'pharmacy' },
+    { key: 'catalog', label: 'Catalog', icon: 'medicine' },
+    { key: 'profile', label: 'Profile', icon: 'profile' },
+  ];
+  const partnerDestinations: { key: string; label: string; icon: IconName }[] = [
+    { key: 'dashboard', label: 'Dashboard', icon: 'home' }, { key: 'inventory', label: 'Inventory', icon: 'medicine' }, { key: 'prescriptions', label: 'Prescriptions', icon: 'prescription' }, { key: 'orders', label: 'Orders', icon: 'orders' }, { key: 'profile', label: 'Profile', icon: 'profile' },
+  ];
+  const selectedAdminTab = adminDestinations.some(item => item.key === adminTab) ? adminTab : 'dashboard';
+  const nav = <PortalNavigation items={adminMode ? adminDestinations.map(item => ({
+    ...item, active: selectedAdminTab === item.key,
+    onPress: () => router.navigate({ pathname: '/admin', params: { tab: item.key } }),
+  })) : partnerMode ? partnerDestinations.map(item => ({ ...item, active: (adminTab || 'dashboard') === item.key, onPress: () => router.navigate({ pathname: '/partner', params: { tab: item.key } }) })) : destinations.map(n => {
     const active = !riderMode && guestMode ? (n.path === '/' ? pathname === '/' : n.path === '/search' ? ['/search', '/medicine', '/availability'].some(p => pathname.startsWith(p)) : n.path === '/pharmacies' ? pathname.startsWith('/pharmac') : pathname.startsWith('/account')) : riderMode ? (n.path === '/rider' ? pathname === '/rider' : pathname.startsWith(n.path)) : (n.path === '/home' ? pathname === '/home' || pathname.startsWith('/search') || pathname.startsWith('/medicine') || pathname.startsWith('/availability') || pathname.startsWith('/pharmac') : n.path === '/prescriptions' ? pathname.startsWith('/prescriptions') : n.path === '/cart' ? pathname.startsWith('/cart') || pathname.startsWith('/checkout') : n.path === '/orders' ? pathname.startsWith('/orders') : pathname.startsWith('/profile') || pathname.startsWith('/account'));
-    return <Pressable key={n.path} accessibilityRole="tab" aria-selected={active} accessibilityState={{ selected: active }} onPress={() => router.navigate(n.path)}
-      style={{ flex: wide ? undefined : 1, minHeight: wide ? 48 : 58, paddingHorizontal: wide ? 16 : 6, paddingVertical: 6, flexDirection: wide ? 'row' : 'column', alignItems: 'center', justifyContent: 'center', gap: wide ? 8 : 3, borderRadius: 8, backgroundColor: wide && active ? colors.pale : 'transparent' }}>
-      <Icon name={n.icon} size={22} color={active ? colors.teal : colors.muted} />
-      <Text style={{ color: active ? colors.teal : colors.muted, fontSize: wide ? 14 : 12, lineHeight: 18, fontWeight: active ? '600' : '500' }}>{n.label}</Text>
-    </Pressable>;
-  })}</View>;
+    return { key: n.path, label: n.label, icon: n.icon, active, onPress: () => router.navigate(n.path) };
+  })} />;
   if (!profileReady) return <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12, backgroundColor: colors.bg }}><ActivityIndicator accessibilityLabel="Restoring your account" color={colors.teal} /><NativeText style={{ color: colors.muted }}>Loading your account…</NativeText></View>;
   return <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top', 'bottom']}>
     <StatusBar style="dark" />
@@ -54,15 +68,14 @@ function Shell() {
       <View style={{ width: '100%', maxWidth: 1100, alignSelf: 'center', paddingHorizontal: 20, paddingVertical: wide ? 14 : 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
         <Pressable accessibilityRole="link" accessibilityLabel="MediFind home" onPress={() => router.navigate('/')} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44 }}>
           <Icon name="medicine" size={28} /><Text style={{ fontSize: 21, lineHeight: 28, fontWeight: '700', letterSpacing: -0.6 }}>MediFind</Text>
-        </Pressable>{wide ? nav : <Text style={s.caption}>{riderMode ? 'Rider portal' : guestMode ? 'Browse medicines' : 'Customer preview'}</Text>}
+        </Pressable>{wide ? nav : <Text style={s.caption}>{partnerMode ? 'Pharmacy portal' : adminMode ? 'Staff portal' : riderMode ? 'Rider portal' : guestMode ? 'Browse medicines' : 'Customer preview'}</Text>}
       </View>
     </View>
-    <View style={{ backgroundColor: '#EEF2EF', paddingVertical: 7, paddingHorizontal: 20 }}>
-      <Text style={[s.caption, { textAlign: 'center', fontWeight: '400' }]}>{riderMode ? 'Rider portal · Dispatch assignments only' : 'Sample catalog · Prices and stock are examples · No real orders'}</Text>
-    </View>
+    {!adminMode && !riderMode && !partnerMode && <View style={{ backgroundColor: '#EEF2EF', paddingVertical: 7, paddingHorizontal: 20 }}>
+      <Text style={[s.caption, { textAlign: 'center', fontWeight: '400' }]}>Prototype - Sample listings are labeled - No online payments</Text>
+    </View>}
     <View style={{ flex: 1, display: restricted ? 'none' : 'flex' }}><Slot /></View>
     {restricted && <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}><ActivityIndicator accessibilityLabel="Opening sign in" color={colors.teal} /></View>}
-    {!riderMode && <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 24, backgroundColor: colors.white }}>{(['help', 'privacy', 'terms'] as const).map(page => <Pressable key={page} accessibilityRole="link" onPress={() => router.push(`/${page}`)} style={{ minHeight: 40, justifyContent: 'center' }}><Text style={s.caption}>{page[0].toUpperCase() + page.slice(1)}</Text></Pressable>)}</View>}
     {!wide && <View style={{ backgroundColor: colors.white, borderTopWidth: 1, borderColor: colors.line, paddingVertical: 3 }}>{nav}</View>}
   </SafeAreaView>;
 }
@@ -74,7 +87,7 @@ export default function RootLayout() {
     Inter_600SemiBold: require('../../assets/fonts/Inter-SemiBold.ttf'),
     Inter_700Bold: require('../../assets/fonts/Inter-Bold.ttf'),
   });
-  return <SafeAreaProvider><FontsReady.Provider value={loaded}><CartProvider><CheckoutProvider><ProfileProvider><LocationProvider><PrescriptionsProvider><OrdersProvider>
+  return <SafeAreaProvider><FontsReady.Provider value={loaded}><CartProvider><CheckoutProvider><ProfileProvider><CatalogProvider><LocationProvider><PrescriptionsProvider><OrdersProvider>
     {!loaded && !error ? <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', gap: 16, backgroundColor: colors.bg }}><ActivityIndicator accessibilityLabel="Loading fonts" color={colors.teal} /><NativeText>Loading MediFind…</NativeText></View> : <Shell />}
-  </OrdersProvider></PrescriptionsProvider></LocationProvider></ProfileProvider></CheckoutProvider></CartProvider></FontsReady.Provider></SafeAreaProvider>;
+  </OrdersProvider></PrescriptionsProvider></LocationProvider></CatalogProvider></ProfileProvider></CheckoutProvider></CartProvider></FontsReady.Provider></SafeAreaProvider>;
 }

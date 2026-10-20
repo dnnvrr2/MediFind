@@ -6,8 +6,8 @@ from .models import Customer
 class CustomerSerializer(serializers.ModelSerializer):
     class Meta:
         model = Customer
-        fields = ("id", "email", "full_name", "phone")
-        read_only_fields = ("id", "email")
+        fields = ("id", "email", "full_name", "phone", "is_staff")
+        read_only_fields = ("id", "email", "is_staff")
 
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, min_length=8, trim_whitespace=False)

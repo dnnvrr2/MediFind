@@ -20,7 +20,8 @@
           "isIosBackgroundLocationEnabled": false,
           "isAndroidBackgroundLocationEnabled": false
         }
-      ]
+      ],
+      "expo-sharing"
     ],
     "name": "MediFind",
     "userInterfaceStyle": "light",

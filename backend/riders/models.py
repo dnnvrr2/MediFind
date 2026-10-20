@@ -9,7 +9,7 @@ from django.db import models
 
 def proof_upload_path(instance, filename):
     ext = filename.rsplit(".", 1)[-1].lower()[:8]
-    return f"delivery-proofs/{instance.delivery_id}/{uuid.uuid4().hex}.{ext}"
+    return f"delivery-proofs/{instance.pk}/{uuid.uuid4().hex}.{ext}"
 
 
 def issue_upload_path(instance, filename):

@@ -1,8 +1,9 @@
+import { useSyncExternalStore } from 'react';
 export type Medicine = {
-  id: string; name: string; generic: string; strength: string; form: string;
+  live?: boolean; id: string; name: string; generic: string; strength: string; form: string;
   unit: string; category: string; prescription: boolean; description: string;
 };
-export type Pharmacy = { id: string; name: string; address: string; hours: string; phone: string };
+export type Pharmacy = { point?: { lat: number; lon: number } | null; live?: boolean; isOpen?: boolean; id: string; name: string; address: string; hours: string; phone: string };
 export type Offer = { medicineId: string; pharmacyId: string; price: number; stock: number };
 
 export const medicines: Medicine[] = [
@@ -30,4 +31,18 @@ export const money = (amount: number) => `₱${amount.toFixed(2)}`;
 export function searchMedicines(query: string, filter = 'All') {
   const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
   return medicines.filter(m => words.every(word => `${m.name} ${m.generic} ${m.strength} ${m.form}`.toLowerCase().includes(word)) && (filter === 'All' || (filter === 'OTC' ? !m.prescription : m.prescription)));
+}
+
+let catalogVersion = 0;
+const catalogListeners = new Set<() => void>();
+export function useCatalog() { return useSyncExternalStore(listener => { catalogListeners.add(listener); return () => { catalogListeners.delete(listener); }; }, () => catalogVersion, () => catalogVersion); }
+export function applyPharmacyCatalog(value: { medicines: Medicine[]; pharmacies: Pharmacy[]; offers: Offer[] }) {
+  const sampleMedicines = medicines.filter(m => !m.live);
+  const samplePharmacies = pharmacies.filter(p => !p.live);
+  const sampleOffers = offers.filter(o => samplePharmacies.some(p => p.id === o.pharmacyId));
+  medicines.splice(0, medicines.length, ...sampleMedicines, ...value.medicines);
+  pharmacies.splice(0, pharmacies.length, ...samplePharmacies, ...value.pharmacies);
+  offers.splice(0, offers.length, ...sampleOffers, ...value.offers);
+  catalogVersion++;
+  catalogListeners.forEach(listener => listener());
 }

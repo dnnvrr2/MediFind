@@ -5,7 +5,7 @@ import { Linking, View } from 'react-native';
 import { areaViewport, osmAreaUrl, osmEmbedUrl, pointViewport, osmPointUrl } from '../domain/maps';
 import { Button, Text, TextLink, colors, s } from './ui';
 
-export function AreaMap({ area, height = 230, point: explicitPoint }: { area: string; height?: number; point?: MapPoint | null }) {
+export function AreaMap({ area, height = 230, point: explicitPoint, caption = 'Area map - Pharmacy pins are unverified.' }: { area: string; height?: number; point?: MapPoint | null; caption?: string }) {
   const location = useLocation();
   const point = explicitPoint !== undefined ? explicitPoint : location.area === area ? location.point : null;
   const viewport = point ? pointViewport(point) : areaViewport(area);
@@ -28,10 +28,10 @@ export function AreaMap({ area, height = 230, point: explicitPoint }: { area: st
         onLoad: () => setLoaded(true), onError: () => setFailed(true),
       })}
     </View> : <View style={{ padding: 16, gap: 10, backgroundColor: colors.neutral, borderRadius: 10 }}>
-      <Text style={s.muted}>{failed ? 'The map could not load. You can retry or open OpenStreetMap.' : 'Search this area on OpenStreetMap. An embedded preview is available for the suggested sample areas.'}</Text>
+      <Text style={s.muted}>{failed ? 'Map unavailable. Retry or open OpenStreetMap.' : 'Open this area in OpenStreetMap.'}</Text>
       {failed && <Button title="Retry map" secondary onPress={() => setReload(value => value + 1)} />}
     </View>}
-    <Text style={s.caption}>Area overview · Pharmacy locations are not verified.</Text>
+    <Text style={s.caption}>{caption}</Text>
     <View style={s.between}><TextLink title="© OpenStreetMap contributors" onPress={() => Linking.openURL('https://www.openstreetmap.org/copyright')} /><TextLink title="Open larger map" onPress={() => Linking.openURL(point ? osmPointUrl(point) : osmAreaUrl(area))} /></View>
   </View>;
 }

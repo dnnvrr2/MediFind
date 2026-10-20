@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { View, Pressable } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { searchMedicines } from '../data/catalog';
+import { useCatalog, searchMedicines } from '../data/catalog';
 import { Page, Back, Search, Button, Text, colors, s } from '../components/ui';
 import { Icon } from '../components/icon';
 import { MedicineRow } from '../components/medicine-row';
 
 export default function SearchResults() {
+  useCatalog();
   const params = useLocalSearchParams<{ q?: string; filter?: string }>();
   const q = typeof params.q === 'string' ? params.q : '';
   const filter = params.filter === 'OTC' || params.filter === 'Rx' ? params.filter : 'All';

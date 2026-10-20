@@ -1,6 +1,7 @@
 from pathlib import Path
 import json
 from django.http import FileResponse
+from django.db import transaction
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, permissions, status
 from rest_framework.exceptions import ValidationError
@@ -28,7 +29,7 @@ class OrderListCreateView(OwnerCollectionMixin, generics.ListCreateAPIView):
         customer_notes = {"accepted": "A rider accepted the assignment.", "at_pharmacy": "The rider arrived at the pharmacy.", "picked_up": "The sealed order was picked up.", "out_for_delivery": "The order is out for delivery.", "delivered": "The rider marked the order delivered.", "unsuccessful": "Delivery could not be completed. Dispatch will follow up.", "returning": "The order is being returned to the pharmacy.", "returned": "The order was returned to the pharmacy."}
         for delivery in deliveries:
             row = delivery_ids.get(delivery.order.external_id)
-            if not row or not isinstance(row.get("data"), dict):
+            if not row or not isinstance(row.get("data"), dict) or row["data"].get("managed"):
                 continue
             data = dict(row["data"])
             data["status"] = aliases.get(delivery.status, data.get("status"))
@@ -40,18 +41,37 @@ class OrderListCreateView(OwnerCollectionMixin, generics.ListCreateAPIView):
     def create(self, request, *args, **kwargs):
         payload = request.data.copy()
         external_id = str(payload.get("external_id", "")).strip()
-        if not external_id:
+        if not external_id or len(external_id) > 80:
             raise ValidationError({"external_id": "This field is required."})
-        obj, created = CustomerOrder.objects.update_or_create(owner=request.user, external_id=external_id, defaults={"data": payload.get("data", {})})
+        from pharmacies.models import PharmacyOrder
+        from pharmacies.services import create_order, order_action
+        submitted = payload.get("data", {})
+        if not isinstance(submitted, dict):
+            raise ValidationError("Expected order details.")
+        existing = CustomerOrder.objects.filter(owner=request.user, external_id=external_id).first()
+        managed = PharmacyOrder.objects.filter(order=existing).first() if existing else None
+        if managed:
+            if submitted.get("status") == "cancelled" and existing.data.get("status") != "cancelled":
+                order_action(managed, request.user, "cancelled", "Cancelled by customer.")
+                existing.refresh_from_db()
+            return Response(self.get_serializer(existing).data)
+        managed_order = create_order(request.user, external_id, submitted)
+        if managed_order:
+            return Response(self.get_serializer(managed_order).data, status=201)
+        if not isinstance(submitted, dict):
+            raise ValidationError("Expected order details.")
+        submitted.pop("managed", None)
+        obj, created = CustomerOrder.objects.update_or_create(owner=request.user, external_id=external_id, defaults={"data": submitted})
         return Response(self.get_serializer(obj).data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
 
 class PrescriptionListCreateView(OwnerCollectionMixin, generics.ListCreateAPIView):
     model = CustomerPrescription
     serializer_class = CustomerPrescriptionSerializer
     parser_classes = [JSONParser, MultiPartParser, FormParser]
+    @transaction.atomic
     def create(self, request, *args, **kwargs):
         external_id = str(request.data.get("external_id", "")).strip()
-        if not external_id:
+        if not external_id or len(external_id) > 80:
             raise ValidationError({"external_id": "This field is required."})
         upload = request.FILES.get("file")
         if upload:
@@ -74,10 +94,9 @@ class PrescriptionListCreateView(OwnerCollectionMixin, generics.ListCreateAPIVie
         if not isinstance(raw_data, dict):
             raise ValidationError({"data": "Expected a JSON object."})
         obj, created = CustomerPrescription.objects.get_or_create(owner=request.user, external_id=external_id)
-        obj.data = raw_data
+        from pharmacies.services import save_prescription
+        obj.data = save_prescription(obj, raw_data, upload, request.user)
         if upload:
-            if obj.file:
-                obj.file.delete(save=False)
             obj.file = upload
             obj.original_filename = Path(upload.name).name[:255]
         obj.save()

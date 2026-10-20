@@ -3,10 +3,10 @@ import type { CartItem } from './cart.ts';
 import type { Approval } from './prescriptions.ts';
 import type { Pharmacy } from '../data/catalog.ts';
 
-export type OrderStatus = 'awaiting_confirmation' | 'confirmed' | 'preparing' | 'ready_for_pickup' | 'collected' | 'out_for_delivery' | 'delivered' | 'cancelled' | 'rejected' | 'delivery_failed';
+export type OrderStatus = 'awaiting_confirmation' | 'confirmed' | 'preparing' | 'ready_for_collection' | 'ready_for_pickup' | 'collected' | 'out_for_delivery' | 'delivered' | 'cancelled' | 'rejected' | 'delivery_failed';
 export type OrderEvent = { status: OrderStatus; at: number; note: string };
 export type DemoOrder = {
-  id: string; submissionKey: string; createdAt: number; updatedAt: number; status: OrderStatus;
+  managed?: boolean; id: string; submissionKey: string; createdAt: number; updatedAt: number; status: OrderStatus;
   method: Fulfillment; pharmacy: Pharmacy; lines: QuoteLine[];
   recipient: { name: string; phone: string }; address: DeliveryAddress | null;
   subtotal: number; deliveryFee: number; total: number; payment: string; events: OrderEvent[];
@@ -19,6 +19,7 @@ export const statusInfo: Record<OrderStatus, { label: string; description: strin
   awaiting_confirmation: { label: 'Awaiting confirmation', description: 'Waiting for simulated pharmacy confirmation.', tone: 'warning' },
   confirmed: { label: 'Confirmed', description: 'The pharmacy confirmation has been simulated.', tone: 'neutral' },
   preparing: { label: 'Preparing', description: 'Preparation is being simulated.', tone: 'neutral' },
+  ready_for_collection: { label: 'Ready for rider', description: 'Awaiting rider collection.', tone: 'neutral' },
   ready_for_pickup: { label: 'Ready for pickup', description: 'This demo order is ready for collection at the selected pharmacy.', tone: 'success' },
   collected: { label: 'Collected', description: 'Collection has been simulated. This demo order is complete.', tone: 'success' },
   out_for_delivery: { label: 'Out for delivery', description: 'Delivery progress is simulated. No rider has been dispatched.', tone: 'neutral' },
@@ -73,7 +74,7 @@ export function createDemoOrder(state: OrdersState, items: CartItem[], draft: Ch
   if (!quote.ok) return { ok: false, state, issue: quote.issue };
   const address = draft.method === 'delivery' && draft.address ? Object.fromEntries(Object.entries(draft.address).map(([key, value]) => [key, value.trim()])) as DeliveryAddress : null;
   const order: DemoOrder = {
-    id: `DEMO-${String(state.nextNumber).padStart(6, '0')}`, submissionKey, createdAt: at, updatedAt: at,
+    id: `${quote.pharmacy.live ? 'ORDER-' + at + '-' : 'DEMO-'}${String(state.nextNumber).padStart(6, '0')}`, submissionKey, createdAt: at, updatedAt: at,
     status: 'awaiting_confirmation', method: quote.method, pharmacy: { ...quote.pharmacy },
     lines: quote.lines.map(line => ({ ...line, medicine: { ...line.medicine }, ...(line.approval ? { approval: { ...line.approval } } : {}) })),
     recipient: { name: draft.name.trim(), phone: draft.phone.trim() }, address,

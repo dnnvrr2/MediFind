@@ -6,6 +6,7 @@ import { useProfile } from './profile';
 type ContextValue = {
   records: Prescription[];
   loading: boolean;
+  refresh: () => Promise<void>;
   syncIssue: string;
   create: (file: PrescriptionFile) => PrescriptionResult;
   edit: (id: string, requested: RequestLine[], pharmacyId: string) => PrescriptionResult;
@@ -25,8 +26,14 @@ export function PrescriptionsProvider({ children }: PropsWithChildren) {
   const latest = useRef(records);
   const next = useRef(1);
   const queue = useRef(new Map<string, Promise<void>>());
+  const writing = useRef(0);
+  const edits = useRef(0);
+  const uploaded = useRef(new Map<string, number>());
+  const currentEmail = useRef(profile?.email);
+  currentEmail.current = profile?.email;
   function commit(result: PrescriptionResult) {
     if (result.ok) {
+      edits.current++;
       latest.current = [result.record, ...latest.current.filter(r => r.id !== result.record.id)].sort((a, b) => b.createdAt - a.createdAt);
       setRecords(latest.current);
       if (profile) persist(result.record);
@@ -34,13 +41,16 @@ export function PrescriptionsProvider({ children }: PropsWithChildren) {
     return result;
   }
   function persist(record: Prescription) {
+    writing.current++;
     const previous = queue.current.get(record.id) ?? Promise.resolve();
     const task = previous.catch(() => undefined).then(async () => {
-      const file = record.file.uri.startsWith('remote:') ? undefined : record.file;
+      if (currentEmail.current !== profile?.email) return;
+      const file = record.file.uri.startsWith('remote:') || uploaded.current.get(record.id) === record.revision ? undefined : record.file;
       const safeRecord = { ...record, file: { ...record.file, uri: '' } };
       await api.savePrescription(record.id, safeRecord, file);
+      if (file) uploaded.current.set(record.id, record.revision);
       setSyncIssue('');
-    }).catch(() => setSyncIssue('Prescription changes could not be synced. Check your connection and sign in again.'));
+    }).catch(() => setSyncIssue('Prescription changes could not be synced. Check your connection and sign in again.')).finally(() => { writing.current--; });
     queue.current.set(record.id, task);
   }
   useEffect(() => {
@@ -59,16 +69,31 @@ export function PrescriptionsProvider({ children }: PropsWithChildren) {
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [profile?.email]);
+  async function refresh() {
+    if (!profile || writing.current) return;
+    try {
+      const before = edits.current;
+      const email = profile.email;
+      const response = await api.listPrescriptions<RemotePrescription>();
+      if (writing.current || edits.current !== before || currentEmail.current !== email) return;
+      const restored = rows(response).map(row => {
+        const record = (typeof row.data === 'string' ? JSON.parse(row.data) : row.data) as Prescription;
+        return { ...record, id: row.external_id, file: { ...record.file, uri: row.file_url ? `remote:${row.file_url}` : record.file.uri, name: row.original_filename || record.file.name } };
+      });
+      latest.current = restored.sort((a, b) => b.createdAt - a.createdAt); setRecords(latest.current); setSyncIssue('');
+    } catch { setSyncIssue('Saved prescriptions could not be refreshed.'); }
+  }
+  useEffect(() => { if (!profile) return; const timer = setInterval(() => void refresh(), 20000); return () => clearInterval(timer); }, [profile?.email]);
   function update(id: string, action: (record: Prescription) => PrescriptionResult) {
     const record = latest.current.find(r => r.id === id);
     return record ? commit(action(record)) : { ok: false as const, issue: 'This prescription is not available in the current account.' };
   }
-  return <Context.Provider value={{ records, loading, syncIssue,
+  return <Context.Provider value={{ records, loading, syncIssue, refresh,
     create: file => {
       const issue = fileIssue(file);
       if (issue) return { ok: false, issue };
       const at = Date.now();
-      return commit({ ok: true, record: { id: `RX-${String(next.current++).padStart(4, '0')}`, revision: 1, createdAt: at, updatedAt: at, file: { ...file }, status: 'draft', requested: [], pharmacyId: '', approved: [], note: '' } });
+      return commit({ ok: true, record: { id: `RX-${Date.now()}-${next.current++}`, revision: 1, createdAt: at, updatedAt: at, file: { ...file }, status: 'draft', requested: [], pharmacyId: '', approved: [], note: '' } });
     },
     edit: (id, requested, pharmacyId) => update(id, record => record.status === 'draft' ? { ok: true, record: { ...record, requested, pharmacyId } } : { ok: false, issue: 'This request has already been submitted.' }),
     submit: (id, requested, pharmacyId) => update(id, record => submitPrescription({ ...record, requested, pharmacyId }, Date.now())),

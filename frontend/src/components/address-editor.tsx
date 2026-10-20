@@ -35,7 +35,7 @@ export function AddressEditor({ visible, address, onSave, onCancel }: {
       <View style={{ width: '100%', maxWidth: 560, maxHeight: '95%', alignSelf: 'center', backgroundColor: colors.white, borderRadius: 12, overflow: 'hidden' }}>
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 20, gap: 16 }}>
           <Text accessibilityRole="header" style={s.heading}>{address ? 'Edit delivery address' : 'Add delivery address'}</Text>
-          <Text style={s.muted}>Use a sample address for this preview. Required fields are marked *.</Text>
+          <Text style={s.muted}>Required fields are marked *.</Text>
           <CheckoutField ref={streetRef} label="House/building and street *" placeholder="House number, street, building or unit" value={values.street} onChangeText={value => change('street', value)} error={errors.street} maxLength={160} autoCapitalize="words" returnKeyType="next" onSubmitEditing={() => barangayRef.current?.focus()} />
           <CheckoutField ref={barangayRef} label="Barangay *" value={values.barangay} onChangeText={value => change('barangay', value)} error={errors.barangay} maxLength={80} autoCapitalize="words" returnKeyType="next" onSubmitEditing={() => cityRef.current?.focus()} />
           <CheckoutField ref={cityRef} label="City / municipality *" value={values.city} onChangeText={value => change('city', value)} error={errors.city} maxLength={80} autoCapitalize="words" returnKeyType="next" onSubmitEditing={() => provinceRef.current?.focus()} />
@@ -43,7 +43,7 @@ export function AddressEditor({ visible, address, onSave, onCancel }: {
           <CheckoutField ref={postalRef} label="Postal code (optional)" value={values.postalCode} onChangeText={value => change('postalCode', value)} error={errors.postalCode} maxLength={4} keyboardType="number-pad" returnKeyType="done" onSubmitEditing={save} />
           <Button title="Save address" icon="check" onPress={save} />
           <Button title="Cancel" secondary onPress={onCancel} />
-          <Text style={s.caption}>Kept only for this app session. Saving an address does not submit an order or confirm delivery coverage.</Text>
+          <Text style={s.caption}>Saved for this session. Delivery coverage is unconfirmed.</Text>
         </ScrollView>
       </View>
     </KeyboardAvoidingView>

@@ -14,11 +14,11 @@ export default function OrderConfirmation() {
   const wide = useWindowDimensions().width >= 900;
   if (!order) return <Page><MissingOrder /></Page>;
   return <Page><OrderHeading title="Order confirmation" order={order} />
-    <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}><View style={{ padding: 12, borderRadius: 24, backgroundColor: colors.pale }}><Icon name="check" size={24} /></View><View style={{ flex: 1, gap: 4 }}><Text style={s.heading}>Demo order created</Text><Text style={s.muted}>Saved in this app session. Nothing was sent to a pharmacy, charged, or reserved.</Text></View></View>
+    <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}><View style={{ padding: 12, borderRadius: 24, backgroundColor: colors.pale }}><Icon name="check" size={24} /></View><View style={{ flex: 1, gap: 4 }}><Text style={s.heading}>{order.managed ? "Order submitted" : "Demo order created"}</Text><Text style={s.muted}>{order.managed ? "Awaiting pharmacy acceptance. No online payment was collected." : "Nothing was sent to a pharmacy, charged, or reserved."}</Text></View></View>
     <OrderStatusPanel order={order} />
     <View style={{ flexDirection: wide ? 'row' : 'column', gap: 24, alignItems: 'flex-start' }}>
       <View style={{ flex: wide ? 1 : undefined, width: wide ? undefined : '100%', gap: 24 }}><Text style={s.heading}>{order.pharmacy.name}</Text><OrderItems order={order} /><OrderRecipient order={order} /><OrderDestination order={order} /></View>
-      <View style={{ width: wide ? 320 : '100%', gap: 16 }}><CheckoutSummary quote={orderQuote(order)} /><Button title="Track demo order" icon="orders" onPress={() => router.replace({ pathname: '/orders/[id]/tracking', params: { id: order.id } })} /><Button title="View order details" secondary onPress={() => router.replace({ pathname: '/orders/[id]', params: { id: order.id } })} /><TextLink title="Continue shopping" onPress={() => router.navigate('/')} /></View>
+      <View style={{ width: wide ? 320 : '100%', gap: 16 }}><CheckoutSummary quote={orderQuote(order)} /><Button title={order.managed ? "Track order" : "Track demo order"} icon="orders" onPress={() => router.replace({ pathname: '/orders/[id]/tracking', params: { id: order.id } })} /><Button title="View order details" secondary onPress={() => router.replace({ pathname: '/orders/[id]', params: { id: order.id } })} /><TextLink title="Continue shopping" onPress={() => router.navigate('/')} /></View>
     </View>
   </Page>;
 }

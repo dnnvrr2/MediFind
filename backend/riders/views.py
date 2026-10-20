@@ -3,6 +3,7 @@ from pathlib import Path
 import secrets
 
 from django.contrib.auth import authenticate
+from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import permissions, status
@@ -99,8 +100,9 @@ class RiderDeliveryActionView(APIView):
         "unsuccessful": {"accepted", "returning"}, "returning": {"returned"},
     }
 
+    @transaction.atomic
     def post(self, request, pk):
-        delivery = get_object_or_404(RiderDelivery.objects.select_related("order"), pk=pk, rider=rider_for(request))
+        delivery = get_object_or_404(RiderDelivery.objects.select_for_update().select_related("order"), pk=pk, rider=rider_for(request))
         target = str(request.data.get("status", ""))
         if target not in self.transitions.get(delivery.status, set()):
             return Response({"detail": f"Cannot change a {delivery.get_status_display()} delivery to that status."}, status=status.HTTP_400_BAD_REQUEST)
@@ -144,6 +146,8 @@ class RiderDeliveryActionView(APIView):
         delivery.notes = note or delivery.notes
         delivery.save()
         DeliveryEvent.objects.create(delivery=delivery, actor=request.user, status=target, note=note)
+        from pharmacies.services import rider_updated
+        rider_updated(delivery, request.user)
         return Response(RiderDeliverySerializer(delivery).data)
 
 
@@ -173,6 +177,8 @@ class RiderIssueView(APIView):
         delivery.notes = issue.details[:1000]
         delivery.save(update_fields=["status", "notes", "updated_at"])
         DeliveryEvent.objects.create(delivery=delivery, actor=request.user, status=delivery.status, note=f"Issue reported: {issue.get_reason_display()} — {issue.details[:350]}")
+        from pharmacies.services import rider_updated
+        rider_updated(delivery, request.user)
         delivery.refresh_from_db()
         return Response({"issue": serializer.data, "delivery": RiderDeliverySerializer(delivery).data}, status=status.HTTP_201_CREATED)
 
@@ -185,7 +191,9 @@ class CustomerDeliveryCodeView(APIView):
 
     def get(self, request, order_id):
         order = get_object_or_404(CustomerOrder, external_id=order_id, owner=request.user)
-        delivery = get_object_or_404(RiderDelivery, order=order)
+        delivery = order.rider_deliveries.filter(status="out_for_delivery").order_by("-created_at").first()
+        if not delivery:
+            return Response({"detail": "No active delivery is out for delivery."}, status=409)
         if delivery.status != "out_for_delivery":
             return Response({"detail": "The delivery confirmation code is available when your order is out for delivery."}, status=status.HTTP_409_CONFLICT)
         response = Response({"code": customer_confirmation_code(delivery), "delivery_status": delivery.status})

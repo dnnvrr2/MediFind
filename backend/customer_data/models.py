@@ -9,11 +9,12 @@ def prescription_upload_path(instance, filename):
 class CustomerOrder(models.Model):
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="customer_orders")
     external_id = models.CharField(max_length=80)
+    submission_key = models.CharField(max_length=120, blank=True, default="")
     data = models.JSONField()
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     class Meta:
-        constraints = [models.UniqueConstraint(fields=("owner", "external_id"), name="unique_customer_order_external_id")]
+        constraints = [models.UniqueConstraint(fields=("owner", "external_id"), name="unique_customer_order_external_id"), models.UniqueConstraint(fields=("owner", "submission_key"), condition=~models.Q(submission_key=""), name="unique_customer_order_submission")]
         ordering = ("-created_at",)
 
 class CustomerPrescription(models.Model):

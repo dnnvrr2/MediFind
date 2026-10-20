@@ -1,6 +1,6 @@
 import { View, Pressable, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
-import { medicines, pharmacies, offers, money } from '../data/catalog';
+import { useCatalog, medicines, pharmacies, offers, money } from '../data/catalog';
 import { useOrders } from '../state/orders';
 import { approvalFor } from '../domain/prescriptions';
 import { quoteCheckout } from '../domain/checkout';
@@ -10,13 +10,14 @@ import { Page, Back, Card, Button, Quantity, TextLink, Text, Badge, colors, s } 
 import { EmptyCartIllustration, Icon } from '../components/icon';
 
 export default function Cart() {
+  useCatalog();
   const { items, setItems } = useCart();
   const { approvals } = useOrders();
   const quote = quoteCheckout(items, 'pickup', approvals);
   const pharmacy = pharmacies.find(p => p.id === items[0]?.pharmacyId);
   const wide = useWindowDimensions().width >= 900;
   return <Page><Back title="Shopping cart" />{!items.length ? <View style={{ alignItems: 'center', gap: 16, paddingVertical: 16 }}>
-    <EmptyCartIllustration /><Text style={s.heading}>Your cart is empty</Text><Text style={[s.muted, { textAlign: 'center', maxWidth: 360 }]}>Find a medicine and choose a pharmacy to add your first item.</Text><Button title="Browse medicines" icon="search" onPress={() => router.push('/search')} />
+    <EmptyCartIllustration /><Text style={s.heading}>Your cart is empty</Text><Text style={[s.muted, { textAlign: 'center', maxWidth: 360 }]}>Choose a medicine and pharmacy to get started.</Text><Button title="Browse medicines" icon="search" onPress={() => router.push('/search')} />
   </View> : <View style={{ flexDirection: wide ? 'row' : 'column', gap: 24, alignItems: 'flex-start' }}>
     <View style={{ flex: wide ? 1 : undefined, width: wide ? undefined : '100%', gap: 16 }}>
       {pharmacy && <View style={{ flexDirection: 'row', gap: 12, alignItems: 'flex-start', paddingBottom: 6 }}><Icon name="pharmacy" color={colors.muted} /><View style={{ flex: 1, gap: 4 }}><Text style={s.caption}>Your pharmacy</Text><Text style={s.heading}>{pharmacy.name}</Text><Text style={s.muted}>{pharmacy.address}</Text></View></View>}
@@ -30,6 +31,6 @@ export default function Cart() {
         </View>;
       })}</View><TextLink title="Prescription history" onPress={() => router.push('/prescriptions')} /><TextLink title="Continue shopping" icon="arrow-right" onPress={() => router.push('/search')} />
     </View>
-    <View style={{ width: wide ? 320 : '100%' }}><Card><Text style={s.heading}>Order summary</Text><View style={s.between}><Text style={s.text}>Subtotal</Text><Text style={[s.price, { fontSize: 24, lineHeight: 32 }]}>{money(cartTotal(items))}</Text></View><Text style={s.muted}>Choose pickup or delivery at checkout to see the sample fee.</Text>{!quote.ok && <Text accessibilityRole="alert" style={{ color: colors.danger }}>{quote.issue}</Text>}<Button disabled={!quote.ok} title="Proceed to checkout" icon="arrow-right" onPress={() => router.push('/checkout')} /><Text style={s.caption}>No orders are accepted in this preview. The cart clears when you refresh or restart the app.</Text></Card></View>
+    <View style={{ width: wide ? 320 : '100%' }}><Card><Text style={s.heading}>Order summary</Text><View style={s.between}><Text style={s.text}>Subtotal</Text><Text style={[s.price, { fontSize: 24, lineHeight: 32 }]}>{money(cartTotal(items))}</Text></View><Text style={s.muted}>Delivery fees are shown at checkout.</Text>{!quote.ok && <Text accessibilityRole="alert" style={{ color: colors.danger }}>{quote.issue}</Text>}<Button disabled={!quote.ok} title="Proceed to checkout" icon="arrow-right" onPress={() => router.push('/checkout')} /><Text style={s.caption}>Your cart clears on refresh.</Text></Card></View>
   </View>}</Page>;
 }

@@ -25,7 +25,7 @@ export default function OrderDetails() {
         <OrderItems order={order} /><OrderRecipient order={order} /><OrderDestination order={order} />
         <Card><Text style={s.heading}>Status history</Text>{order.events.map((event, i) => <View key={i} style={{ gap: 4 }}><Text style={s.caption}>{orderTime(event.at)}</Text><Text style={s.text}>{event.note}</Text></View>)}</Card>
       </View>
-      <View style={{ width: wide ? 320 : '100%', gap: 16 }}><CheckoutSummary quote={orderQuote(order)} />{order.status === 'out_for_delivery' && <Card><Text style={s.heading}>Delivery confirmation code</Text><Text style={s.muted}>Give this code to the rider only when you receive the sealed order.</Text><Text accessibilityLabel="Delivery confirmation code" style={[s.title, { letterSpacing: 5 }]}>{deliveryCode || '••••••'}</Text></Card>}<Button title="Track demo order" icon="orders" onPress={() => router.push({ pathname: '/orders/[id]/tracking', params: { id: order.id } })} /><OrderActions order={order} /></View>
+      <View style={{ width: wide ? 320 : '100%', gap: 16 }}><CheckoutSummary quote={orderQuote(order)} />{order.status === 'out_for_delivery' && <Card><Text style={s.heading}>Delivery confirmation code</Text><Text style={s.muted}>Give this code to the rider only when you receive the sealed order.</Text><Text accessibilityLabel="Delivery confirmation code" style={[s.title, { letterSpacing: 5 }]}>{deliveryCode || '••••••'}</Text></Card>}<Button title={order.managed ? "Track order" : "Track demo order"} icon="orders" onPress={() => router.push({ pathname: '/orders/[id]/tracking', params: { id: order.id } })} /><OrderActions order={order} /></View>
     </View>
   </Page>;
 }
