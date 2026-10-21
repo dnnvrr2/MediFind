@@ -44,13 +44,14 @@ class OrderListCreateView(OwnerCollectionMixin, generics.ListCreateAPIView):
         if not external_id or len(external_id) > 80:
             raise ValidationError({"external_id": "This field is required."})
         from pharmacies.models import PharmacyOrder
-        from pharmacies.services import create_order, order_action
+        from pharmacies.services import create_order, order_action, ensure_same_order
         submitted = payload.get("data", {})
         if not isinstance(submitted, dict):
             raise ValidationError("Expected order details.")
         existing = CustomerOrder.objects.filter(owner=request.user, external_id=external_id).first()
         managed = PharmacyOrder.objects.filter(order=existing).first() if existing else None
         if managed:
+            ensure_same_order(existing, submitted)
             if submitted.get("status") == "cancelled" and existing.data.get("status") != "cancelled":
                 order_action(managed, request.user, "cancelled", "Cancelled by customer.")
                 existing.refresh_from_db()

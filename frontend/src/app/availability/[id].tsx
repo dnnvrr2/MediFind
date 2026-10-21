@@ -50,7 +50,7 @@ export default function Availability() {
       </View>;
     })}</View>
     {!listings.length && <View style={{ gap: 10 }}><Text style={s.heading}>No pharmacy listings in this area</Text><Text style={s.muted}>Change your location or try another medicine.</Text></View>}
-    {m.prescription && <Card><Text style={s.heading}>Review before ordering</Text><Text style={s.muted}>Upload a prescription for simulated review before adding items.</Text><Button title={profile ? "Upload prescription" : "Sign in to upload a prescription"} icon="upload" onPress={() => router.push('/prescriptions/upload')} /></Card>}{!m.prescription && <Card><Text style={s.heading}>Your selection</Text>{offer ? <>
+    {m.prescription && <Card><Text style={s.heading}>Review before ordering</Text><Text style={s.muted}>{m.live ? 'Submit a prescription for pharmacist review before adding items.' : 'Upload a prescription for simulated review before adding items.'}</Text><Button title={profile ? "Upload prescription" : "Sign in to upload a prescription"} icon="upload" onPress={() => router.push('/prescriptions/upload')} /></Card>}{!m.prescription && <Card><Text style={s.heading}>Your selection</Text>{offer ? <>
       <Text style={s.text}>{pharmacies.find(p => p.id === selected)?.name}</Text><Text style={s.muted}>{money(offer.price)} per {m.unit}{existing > 0 ? ` · ${existing} already in your cart` : ''}</Text>
       <View style={s.between}><Text style={s.text}>Quantity ({m.unit}s)</Text><Quantity value={quantity} max={available} onChange={setQuantity} /></View>
       <View style={[s.between, { borderTopWidth: 1, borderColor: colors.line, paddingTop: 16 }]}><Text style={s.text}>Item subtotal</Text><Text style={s.price}>{money(offer.price * quantity)}</Text></View>

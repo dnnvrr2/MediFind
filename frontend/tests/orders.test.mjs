@@ -21,7 +21,7 @@ test('a repeated submission key returns the same order even after cart clearing'
   const first = create(); const repeated = createDemoOrder(first.state, [], draft(), 'attempt-1', 2000);
   assert.equal(repeated.ok, true); assert.equal(repeated.created, false); assert.equal(repeated.order.id, first.order.id); assert.equal(repeated.state.orders.length, 1);
   const second = createDemoOrder(first.state, cart(), draft(), 'attempt-2', 2000);
-  assert.equal(second.order.id, 'DEMO-000002'); assert.equal(second.state.orders.length, 2);
+  assert.equal(second.order.id, 'DEMO-' + second.order.submissionKey); assert.equal(second.state.orders.length, 2);
 });
 
 test('invalid submissions do not create an order or consume an ID', () => {

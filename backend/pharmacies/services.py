@@ -1,5 +1,6 @@
 import copy
 import hashlib
+import json
 import uuid
 from decimal import Decimal
 from django.db import transaction
@@ -33,7 +34,7 @@ def medicine_data(m):
 
 
 def pharmacy_data(p):
-    return {"id": str(p.pk), "name": p.name, "address": p.address, "phone": p.phone, "hours": p.hours or "Confirm hours with the pharmacy", "live": True, "isOpen": p.is_open, "point": {"lat": float(p.latitude), "lon": float(p.longitude)} if p.location_verified and p.latitude is not None and p.longitude is not None else None}
+    return {"id": str(p.pk), "name": p.name, "address": p.address, "phone": p.phone, "contactNumbers": p.contact_numbers or ([p.phone] if p.phone else []), "hours": p.hours or "Confirm hours with the pharmacy", "live": True, "isOpen": p.is_open, "point": {"lat": float(p.latitude), "lon": float(p.longitude)} if p.location_verified and p.latitude is not None and p.longitude is not None else None}
 
 
 def inventory_rows(pharmacy, lock=False):
@@ -113,6 +114,21 @@ def save_prescription(record, data, upload, user):
     return data
 
 
+def order_intent(data):
+    """Compare customer intent, ignoring computed prices and server status history."""
+    try:
+        lines = [{"medicine": line["medicine"]["id"], "quantity": line["quantity"], "approval": {key: line.get("approval", {}).get(key) for key in ("prescriptionId", "revision")} if line.get("approval") else None} for line in data["lines"]]
+        return {"pharmacy": data["pharmacy"]["id"], "method": data["method"], "recipient": {key: str(data.get("recipient", {}).get(key, "")).strip() for key in ("name", "phone")}, "address": {key: str((data.get("address") or {}).get(key, "")).strip() for key in ("street", "barangay", "city", "province", "postalCode")} if data["method"] == "delivery" else None, "lines": sorted(lines, key=lambda line: line["medicine"])}
+    except (TypeError, KeyError, AttributeError):
+        raise ValidationError("Complete order details are required.")
+
+
+def ensure_same_order(existing, submitted):
+    if order_intent(existing.data) != order_intent(submitted):
+        raise Conflict("This checkout reference was already used for different details. Start a new checkout.")
+    return existing
+
+
 def create_order(user, external_id, submitted):
     if not isinstance(submitted, dict):
         raise ValidationError("Expected order details.")
@@ -124,13 +140,14 @@ def create_order(user, external_id, submitted):
             raise ValidationError("Pharmacy catalog items require their approved pharmacy.")
         return None
     with transaction.atomic():
+        user.__class__.objects.select_for_update().get(pk=user.pk)
         pharmacy = PharmacyApplication.objects.select_for_update().get(pk=pharmacy.pk)
         submission_key = submitted.get("submissionKey")
         if not isinstance(submission_key, str) or not 1 <= len(submission_key) <= 120:
             raise ValidationError("A valid order submission key is required.")
         existing = CustomerOrder.objects.filter(owner=user, submission_key=submission_key).first() or CustomerOrder.objects.filter(owner=user, external_id=external_id).first()
         if existing:
-            return existing
+            return ensure_same_order(existing, submitted)
         if pharmacy.status != "Approved" or not pharmacy.is_open:
             raise ValidationError("This pharmacy is currently closed to orders.")
         offers = inventory_lookup(pharmacy, lock=True)
@@ -233,14 +250,42 @@ def order_action(managed, user, status, note="", version=None):
         return managed
 
 
+def assign_rider(order, rider, actor, expected_version=None):
+    from riders.models import RiderDelivery, RiderProfile, DeliveryEvent
+    with transaction.atomic():
+        managed = PharmacyOrder.objects.select_for_update().select_related("order", "pharmacy").filter(order=order).first()
+        if not managed:
+            raise ValidationError("Only pharmacy-managed orders can be dispatched. Sample orders are previews.")
+        if expected_version is not None and managed.version != expected_version:
+            raise Conflict()
+        data = managed.order.data
+        if managed.pharmacy.status != "Approved" or data.get("method") != "delivery" or data.get("status") != "ready_for_collection" or managed.reservation != "held":
+            raise Conflict("The pharmacy must accept, reserve, prepare, and mark this order ready before dispatch.")
+        if order.rider_deliveries.exclude(status__in=("declined", "cancelled")).exists():
+            raise Conflict("This order already has an active or completed rider assignment.")
+        rider = RiderProfile.objects.select_for_update().select_related("user").get(pk=rider.pk)
+        if not rider.approved or not rider.available or not rider.user.is_active:
+            raise ValidationError("Choose an available approved rider.")
+        delivery = RiderDelivery.objects.create(order=order, rider=rider, customer_name=data["recipient"]["name"], customer_phone=data["recipient"]["phone"], delivery_address=data["address"], pharmacy_name=managed.pharmacy.name, pharmacy_address=managed.pharmacy.address, payment_method="cod", amount_due=data["total"])
+        DeliveryEvent.objects.create(delivery=delivery, actor=actor, status="offered", note="Assigned for sealed package collection.")
+        managed.version += 1
+        managed.save(update_fields=["version"])
+        audit(managed.pharmacy, actor, "Rider assigned", order.external_id, rider.user.full_name)
+        return managed
+
+
 def rider_updated(delivery, actor):
     with transaction.atomic():
         managed = PharmacyOrder.objects.select_for_update().select_related("order").filter(order=delivery.order).first()
         if not managed:
             return
         data = copy.deepcopy(managed.order.data)
-        statuses = {"picked_up": "out_for_delivery", "out_for_delivery": "out_for_delivery", "delivered": "delivered", "unsuccessful": "delivery_failed", "returning": "delivery_failed", "returned": "delivery_failed"}
+        if data.get("status") in ("cancelled", "rejected", "collected", "delivered", "returned"):
+            raise Conflict("This order has already closed. Its delivery cannot be advanced.")
+        statuses = {"offered": "ready_for_collection", "declined": "ready_for_collection", "cancelled": "ready_for_collection", "accepted": "ready_for_collection", "at_pharmacy": "ready_for_collection", "picked_up": "rider_collected", "out_for_delivery": "out_for_delivery", "delivered": "delivered", "unsuccessful": "delivery_issue", "returning": "returning", "returned": "returned"}
         state = statuses.get(delivery.status)
+        if delivery.status in ("accepted", "at_pharmacy") and data.get("status") in ("delivery_issue", "delivery_retry"):
+            state = "delivery_retry"
         if state:
             data["status"] = state
             data["updatedAt"] = int(timezone.now().timestamp() * 1000)
@@ -248,7 +293,7 @@ def rider_updated(delivery, actor):
             managed.order.data = data
             managed.order.save(update_fields=["data", "updated_at"])
         if delivery.status in ("delivered", "returned"):
-            # Returned stock requires pharmacist inspection before manual restocking.
+            # Returned medicine must be inspected before it can be manually restocked.
             release_or_consume(managed, consume=True)
         managed.version += 1
         managed.save(update_fields=["version", "reservation"])

@@ -14,8 +14,9 @@ import { Icon, type IconName } from '../components/icon';
 import { FontsReady } from '../components/typography';
 import { useProfile } from '../state/profile';
 import { LocationProvider } from '../state/location';
-import { needsCustomer } from '../domain/public-access';
+import { accountHome, pharmacyTabs, needsCustomer, navigationPortal } from '../domain/public-access';
 import { PortalNavigation } from '../components/portal-navigation';
+import { sessionGeneration } from '../api/client';
 import { CatalogProvider } from '../state/catalog';
 
 function Shell() {
@@ -23,12 +24,13 @@ function Shell() {
   const pathname = usePathname();
   const { tab: adminTab } = useGlobalSearchParams<{ tab?: string }>();
   const { items } = useCart();
-  const adminMode = pathname === '/admin' || pathname.startsWith('/admin/');
-  const riderMode = pathname.startsWith('/rider');
-  const partnerMode = pathname === '/partner' || pathname.startsWith('/partner/');
   const { ready: profileReady, profile } = useProfile();
-  const guestMode = pathname === '/' || !profile;
-  const restricted = !riderMode && !profile && needsCustomer(pathname);
+  const portal = navigationPortal(pathname, profile);
+  const adminMode = portal === 'admin';
+  const riderMode = portal === 'rider';
+  const partnerMode = portal === 'partner';
+  const guestMode = !profile;
+  const restricted = !profile && pathname !== '/rider/login' && needsCustomer(pathname);
   useEffect(() => {
     if (profileReady && restricted) router.replace({ pathname: '/account/sign-in', params: { returnTo: pathname } });
   }, [profileReady, restricted, pathname]);
@@ -39,9 +41,9 @@ function Shell() {
   const riderDestinations: { path: '/rider' | '/rider/deliveries' | '/rider/history' | '/rider/profile'; label: string; icon: IconName }[] = [
     { path: '/rider', label: 'Today', icon: 'home' }, { path: '/rider/deliveries', label: 'Deliveries', icon: 'orders' }, { path: '/rider/history', label: 'History', icon: 'orders' }, { path: '/rider/profile', label: 'Profile', icon: 'profile' },
   ];
-  const guestDestinations: { path: '/' | '/search' | '/pharmacies' | '/account/sign-in'; label: string; icon: IconName }[] = [
+  const guestDestinations: { path: '/' | '/search' | '/pharmacies' | '/profile'; label: string; icon: IconName }[] = [
     { path: '/', label: 'Home', icon: 'home' }, { path: '/search', label: 'Search', icon: 'search' },
-    { path: '/pharmacies', label: 'Pharmacies', icon: 'pharmacy' }, { path: '/account/sign-in', label: 'Login', icon: 'profile' },
+    { path: '/pharmacies', label: 'Pharmacies', icon: 'pharmacy' }, { path: '/profile', label: 'Login', icon: 'profile' },
   ];
   const destinations = riderMode ? riderDestinations : guestMode ? guestDestinations : customerDestinations;
   const adminDestinations: { key: string; label: string; icon: IconName }[] = [
@@ -50,15 +52,13 @@ function Shell() {
     { key: 'catalog', label: 'Catalog', icon: 'medicine' },
     { key: 'profile', label: 'Profile', icon: 'profile' },
   ];
-  const partnerDestinations: { key: string; label: string; icon: IconName }[] = [
-    { key: 'dashboard', label: 'Dashboard', icon: 'home' }, { key: 'inventory', label: 'Inventory', icon: 'medicine' }, { key: 'prescriptions', label: 'Prescriptions', icon: 'prescription' }, { key: 'orders', label: 'Orders', icon: 'orders' }, { key: 'profile', label: 'Profile', icon: 'profile' },
-  ];
+  const partnerDestinations = pharmacyTabs(profile?.pharmacyStatus === 'Approved');
   const selectedAdminTab = adminDestinations.some(item => item.key === adminTab) ? adminTab : 'dashboard';
   const nav = <PortalNavigation items={adminMode ? adminDestinations.map(item => ({
     ...item, active: selectedAdminTab === item.key,
     onPress: () => router.navigate({ pathname: '/admin', params: { tab: item.key } }),
-  })) : partnerMode ? partnerDestinations.map(item => ({ ...item, active: (adminTab || 'dashboard') === item.key, onPress: () => router.navigate({ pathname: '/partner', params: { tab: item.key } }) })) : destinations.map(n => {
-    const active = !riderMode && guestMode ? (n.path === '/' ? pathname === '/' : n.path === '/search' ? ['/search', '/medicine', '/availability'].some(p => pathname.startsWith(p)) : n.path === '/pharmacies' ? pathname.startsWith('/pharmac') : pathname.startsWith('/account')) : riderMode ? (n.path === '/rider' ? pathname === '/rider' : pathname.startsWith(n.path)) : (n.path === '/home' ? pathname === '/home' || pathname.startsWith('/search') || pathname.startsWith('/medicine') || pathname.startsWith('/availability') || pathname.startsWith('/pharmac') : n.path === '/prescriptions' ? pathname.startsWith('/prescriptions') : n.path === '/cart' ? pathname.startsWith('/cart') || pathname.startsWith('/checkout') : n.path === '/orders' ? pathname.startsWith('/orders') : pathname.startsWith('/profile') || pathname.startsWith('/account'));
+  })) : partnerMode ? partnerDestinations.map(item => ({ ...item, active: (partnerDestinations.some(item => item.key === adminTab) ? adminTab : 'dashboard') === item.key, onPress: () => router.navigate({ pathname: '/partner', params: { tab: item.key } }) })) : destinations.map(n => {
+    const active = !riderMode && guestMode ? (n.path === '/' ? pathname === '/' : n.path === '/search' ? ['/search', '/medicine', '/availability'].some(p => pathname.startsWith(p)) : n.path === '/pharmacies' ? pathname.startsWith('/pharmac') : pathname.startsWith('/profile') || pathname.startsWith('/account')) : riderMode ? (n.path === '/rider' ? pathname === '/rider' : pathname.startsWith(n.path)) : (n.path === '/home' ? pathname === '/home' || pathname.startsWith('/search') || pathname.startsWith('/medicine') || pathname.startsWith('/availability') || pathname.startsWith('/pharmac') : n.path === '/prescriptions' ? pathname.startsWith('/prescriptions') : n.path === '/cart' ? pathname.startsWith('/cart') || pathname.startsWith('/checkout') : n.path === '/orders' ? pathname.startsWith('/orders') : pathname.startsWith('/profile') || pathname.startsWith('/account'));
     return { key: n.path, label: n.label, icon: n.icon, active, onPress: () => router.navigate(n.path) };
   })} />;
   if (!profileReady) return <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12, backgroundColor: colors.bg }}><ActivityIndicator accessibilityLabel="Restoring your account" color={colors.teal} /><NativeText style={{ color: colors.muted }}>Loading your account…</NativeText></View>;
@@ -66,7 +66,7 @@ function Shell() {
     <StatusBar style="dark" />
     <View style={{ backgroundColor: colors.white, borderBottomWidth: 1, borderColor: colors.line }}>
       <View style={{ width: '100%', maxWidth: 1100, alignSelf: 'center', paddingHorizontal: 20, paddingVertical: wide ? 14 : 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-        <Pressable accessibilityRole="link" accessibilityLabel="MediFind home" onPress={() => router.navigate('/')} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44 }}>
+        <Pressable accessibilityRole="link" accessibilityLabel="MediFind home" onPress={() => router.navigate(accountHome(profile))} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44 }}>
           <Icon name="medicine" size={28} /><Text style={{ fontSize: 21, lineHeight: 28, fontWeight: '700', letterSpacing: -0.6 }}>MediFind</Text>
         </Pressable>{wide ? nav : <Text style={s.caption}>{partnerMode ? 'Pharmacy portal' : adminMode ? 'Staff portal' : riderMode ? 'Rider portal' : guestMode ? 'Browse medicines' : 'Customer preview'}</Text>}
       </View>
@@ -80,6 +80,11 @@ function Shell() {
   </SafeAreaView>;
 }
 
+function AccountScope() {
+  const { profile } = useProfile();
+  return <CartProvider key={profile ? `${profile.id ?? profile.email}:${sessionGeneration()}` : 'guest'}><CheckoutProvider><PrescriptionsProvider><OrdersProvider><Shell /></OrdersProvider></PrescriptionsProvider></CheckoutProvider></CartProvider>;
+}
+
 export default function RootLayout() {
   const [loaded, error] = useFonts({
     Inter_400Regular: require('../../assets/fonts/Inter-Regular.ttf'),
@@ -87,7 +92,7 @@ export default function RootLayout() {
     Inter_600SemiBold: require('../../assets/fonts/Inter-SemiBold.ttf'),
     Inter_700Bold: require('../../assets/fonts/Inter-Bold.ttf'),
   });
-  return <SafeAreaProvider><FontsReady.Provider value={loaded}><CartProvider><CheckoutProvider><ProfileProvider><CatalogProvider><LocationProvider><PrescriptionsProvider><OrdersProvider>
-    {!loaded && !error ? <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', gap: 16, backgroundColor: colors.bg }}><ActivityIndicator accessibilityLabel="Loading fonts" color={colors.teal} /><NativeText>Loading MediFind…</NativeText></View> : <Shell />}
-  </OrdersProvider></PrescriptionsProvider></LocationProvider></CatalogProvider></ProfileProvider></CheckoutProvider></CartProvider></FontsReady.Provider></SafeAreaProvider>;
+  return <SafeAreaProvider><FontsReady.Provider value={loaded}><ProfileProvider><CatalogProvider><LocationProvider>
+    {!loaded && !error ? <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', gap: 16, backgroundColor: colors.bg }}><ActivityIndicator accessibilityLabel="Loading fonts" color={colors.teal} /><NativeText>Loading MediFind…</NativeText></View> : <AccountScope />}
+  </LocationProvider></CatalogProvider></ProfileProvider></FontsReady.Provider></SafeAreaProvider>;
 }

@@ -55,7 +55,7 @@ class CustomerApiFlowTests(TransactionTestCase):
     def test_orders_are_scoped_to_the_authenticated_customer(self):
         first = self.register("owner-one@example.com")
         self.authenticate(first["access"])
-        created = self.client.post("/api/customer/orders/", {"external_id": "DEMO-000001", "data": {"total": 125.5}}, format="json")
+        created = self.client.post("/api/customer/orders/", {"external_id": "DEMO-000001", "data": {"pharmacy": {"id": "sample"}, "total": 125.5}}, format="json")
         self.assertEqual(created.status_code, 201, created.data)
         self.client.credentials()
         second = self.register("owner-two@example.com")
@@ -116,8 +116,11 @@ class CustomerApiFlowTests(TransactionTestCase):
         self.assertEqual(len(mail.outbox), 1)
         user = Customer.objects.get(email="reset@example.com")
         uid = urlsafe_base64_encode(force_bytes(user.pk))
-        token = default_token_generator.make_token(user)
-        self.assertIn(f"uid={uid}&token={token}", mail.outbox[0].body)
+        import re
+        match = re.search(r"uid=([^&\s]+)&token=([^\s]+)", mail.outbox[0].body)
+        self.assertIsNotNone(match)
+        self.assertEqual(match.group(1), uid)
+        token = match.group(2)
         changed = self.client.post("/api/auth/password-reset/confirm/", {"uid": uid, "token": token, "new_password": "A-new-strong-password-934!"}, format="json")
         self.assertEqual(changed.status_code, 200, changed.data)
         user.refresh_from_db()

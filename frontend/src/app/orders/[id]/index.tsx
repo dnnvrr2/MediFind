@@ -12,12 +12,11 @@ import { api } from '../../../api/client';
 
 export default function OrderDetails() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { orders, refreshOrders } = useOrders(); const order = orders.find(order => order.id === id);
+  const { orders, loading, syncIssue } = useOrders(); const order = orders.find(order => order.id === id);
   const [deliveryCode, setDeliveryCode] = useState('');
-  useEffect(() => { refreshOrders(); const timer = setInterval(refreshOrders, 20000); return () => clearInterval(timer); }, [id]);
   useEffect(() => { let live = true; if (order?.status === 'out_for_delivery') api.customerDeliveryCode(id).then(result => { if (live) setDeliveryCode(result.code); }).catch(() => { if (live) setDeliveryCode(''); }); else setDeliveryCode(''); return () => { live = false; }; }, [id, order?.status]);
   const wide = useWindowDimensions().width >= 900;
-  if (!order) return <Page><MissingOrder /></Page>;
+  if (!order) return <Page>{loading ? <Text style={s.muted}>Loading order...</Text> : <><MissingOrder />{!!syncIssue && <Text accessibilityRole="alert">{syncIssue}</Text>}</>}</Page>;
   return <Page><OrderHeading title="Order details" order={order} /><OrderStatusPanel order={order} />
     <View style={{ flexDirection: wide ? 'row' : 'column', alignItems: 'flex-start', gap: 24 }}>
       <View style={{ flex: wide ? 1 : undefined, width: wide ? undefined : '100%', gap: 24 }}>

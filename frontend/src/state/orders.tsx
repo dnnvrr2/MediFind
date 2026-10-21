@@ -1,5 +1,5 @@
-import { createContext, useContext, useEffect, useRef, useState, type PropsWithChildren } from 'react';
-import { api, ApiError } from '../api/client';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type PropsWithChildren } from 'react';
+import { api, ApiError, sessionGeneration } from '../api/client';
 import { createDemoOrder, initialOrders, remainingApprovals, transitionDemoOrder, type DemoOrder, type OrderResult, type OrderStatus } from '../domain/orders';
 import type { CartItem } from '../domain/cart';
 import type { CheckoutDraft } from '../domain/checkout';
@@ -28,48 +28,53 @@ export function OrdersProvider({ children }: PropsWithChildren) {
   const [loading, setLoading] = useState(false);
   const [syncIssue, setSyncIssue] = useState('');
   const latest = useRef(state);
-  function commit(result: OrderResult) {
-    if (result.ok) { latest.current = result.state; setState(result.state); }
-    return result;
+  const alive = useRef(true);
+  const generation = useRef(sessionGeneration()).current;
+  const mutations = useRef(0);
+  const fetching = useRef(false);
+  const valid = () => alive.current && generation === sessionGeneration();
+  function commitOrder(result: Extract<OrderResult, { ok: true }>, order: DemoOrder) {
+    const state = { orders: [order, ...latest.current.orders.filter(row => row.id !== order.id)], nextNumber: Math.max(latest.current.nextNumber, result.state.nextNumber) };
+    latest.current = state; setState(state); setSyncIssue(''); mutations.current++;
+    return { ...result, order, state };
   }
-  useEffect(() => {
-    let active = true;
-    if (!profile) { latest.current = initialOrders(); setState(latest.current); setLoading(false); setSyncIssue(''); return () => { active = false; }; }
-    setLoading(true);
-    api.listOrders<RemoteOrder>().then(response => {
-      if (!active) return;
+  const refreshOrders = useCallback(async () => {
+    if (!profile || fetching.current || !valid()) return;
+    fetching.current = true;
+    const before = mutations.current;
+    try {
+      const response = await api.listOrders<RemoteOrder>();
+      if (!valid() || before !== mutations.current) return;
       const orders = orderRows(response).map(row => row.data).filter(Boolean);
-      latest.current = { orders, nextNumber: 1 };
-      setState(latest.current);
-      setSyncIssue('');
-    }).catch(() => { if (active) setSyncIssue('Saved orders could not be loaded. Check your connection.'); })
-      .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
-  }, [profile?.email]);
+      latest.current = { orders, nextNumber: Math.max(latest.current.nextNumber, orders.length + 1) };
+      setState(latest.current); setSyncIssue('');
+    } catch { if (valid()) setSyncIssue('Saved orders could not be refreshed. Check your connection.'); }
+    finally { fetching.current = false; if (valid()) setLoading(false); }
+  }, [profile?.id, profile?.email, generation]);
+  useEffect(() => {
+    alive.current = true;
+    if (profile) { setLoading(true); void refreshOrders(); }
+    const timer = profile ? setInterval(() => void refreshOrders(), 20000) : undefined;
+    return () => { alive.current = false; if (timer) clearInterval(timer); };
+  }, [refreshOrders]);
 
   const placeOrder: OrdersContext['placeOrder'] = async (items, draft, key) => {
+    if (!profile || !valid()) return { ok: false, state: latest.current, issue: 'Sign in before placing an order.' };
     const result = createDemoOrder(latest.current, items, draft, key, Date.now(), grants);
-    if (!result.ok || !profile) return commit(result);
-    try { const saved = await api.saveOrder(result.order.id, result.order); const order = saved.data; setSyncIssue(''); return commit({ ...result, order, state: { ...result.state, orders: [order, ...result.state.orders.filter(row => row.id !== order.id)] } }); }
-    catch (error) { return { ok: false, state: latest.current, issue: error instanceof ApiError ? error.message : 'Could not save this order to your account. Please try again.' }; }
+    if (!result.ok) return result;
+    mutations.current++;
+    try { const saved = await api.saveOrder(result.order.id, result.order); if (!valid()) return { ok: false, state: latest.current, issue: 'The account changed. Reopen your orders.' }; return commitOrder(result, saved.data); }
+    catch (error) { return { ok: false, state: latest.current, issue: error instanceof ApiError ? error.message : 'Could not save this order. Retry with the same checkout.' }; }
   };
   const updateOrder: OrdersContext['updateOrder'] = async (id, status, note = '') => {
+    if (!profile || !valid()) return { ok: false, state: latest.current, issue: 'Sign in to update your order.' };
     const original = latest.current.orders.find(order => order.id === id);
     if (original?.managed && status !== 'cancelled') return { ok: false, state: latest.current, issue: 'Only the pharmacy or assigned rider can update this order.' };
     const result = transitionDemoOrder(latest.current, id, status, note, Date.now());
-    if (!result.ok || !profile) return commit(result);
-    try { const saved = await api.saveOrder(result.order.id, result.order); const order = saved.data; setSyncIssue(''); return commit({ ...result, order, state: { ...result.state, orders: [order, ...result.state.orders.filter(row => row.id !== order.id)] } }); }
+    if (!result.ok) return result;
+    mutations.current++;
+    try { const saved = await api.saveOrder(result.order.id, result.order); if (!valid()) return { ok: false, state: latest.current, issue: 'The account changed. Reopen your orders.' }; return commitOrder(result, saved.data); }
     catch (error) { return { ok: false, state: latest.current, issue: error instanceof ApiError ? error.message : 'Could not save the order update. Please try again.' }; }
-  };
-  const refreshOrders = async () => {
-    if (!profile) return;
-    try {
-      const response = await api.listOrders<RemoteOrder>();
-      const orders = orderRows(response).map(row => row.data).filter(Boolean);
-      latest.current = { orders, nextNumber: latest.current.nextNumber };
-      setState(latest.current);
-      setSyncIssue('');
-    } catch { setSyncIssue('Saved orders could not be refreshed. Check your connection.'); }
   };
   return <Context.Provider value={{ orders: state.orders, approvals: remainingApprovals(grants, state.orders), loading, syncIssue, placeOrder, updateOrder, refreshOrders }}>{children}</Context.Provider>;
 }

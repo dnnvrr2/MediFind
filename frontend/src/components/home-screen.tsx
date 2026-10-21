@@ -37,7 +37,7 @@ export function HomeScreen({ guest = false }: { guest?: boolean }) {
       </Pressable>
       <Pressable accessibilityRole="link" onPress={() => router.push(guest ? { pathname: '/account/sign-in', params: { returnTo: '/prescriptions/upload' } } : '/prescriptions/upload')} style={({ pressed }) => [s.card, { flexDirection: 'row', alignItems: 'center', gap: 16, backgroundColor: pressed ? colors.pale : colors.white }]}>
         <View style={{ width: 48, height: 48, borderRadius: 12, backgroundColor: colors.pale, alignItems: 'center', justifyContent: 'center' }}><Icon name="prescription" size={25} color={colors.teal} /></View>
-        <View style={{ flex: 1, gap: 6 }}><Text style={s.heading}>Have a prescription?</Text><Text style={s.muted}>{customer ? 'Upload for simulated review.' : 'Sign in to upload.'}</Text></View>
+        <View style={{ flex: 1, gap: 6 }}><Text style={s.heading}>Have a prescription?</Text><Text style={s.muted}>{customer ? 'Upload for pharmacy review.' : 'Sign in to upload.'}</Text></View>
         <Icon name="arrow-right" size={20} color={colors.muted} />
       </Pressable>
     </View>
@@ -48,11 +48,11 @@ export function HomeScreen({ guest = false }: { guest?: boolean }) {
       </View>
       <View style={{ flex: wide ? 1 : undefined, width: wide ? undefined : '100%', gap: 8 }}>
         <View style={s.between}><Text accessibilityRole="header" style={s.heading}>Pharmacies</Text><TextLink title="View all" icon="arrow-right" onPress={() => router.push('/pharmacies')} /></View>
-        <View style={s.list}>{!localPharmacies.length && <View style={{ padding: 20, gap: 8 }}><Text style={s.heading}>No sample pharmacies in this area</Text><Text style={s.muted}>Change your location to browse the available sample listings.</Text><LocationPicker /></View>}{localPharmacies.map((p, i) => <Pressable key={p.id} accessibilityRole="link" accessibilityLabel={`View ${p.name}`} onPress={() => router.push({ pathname: '/pharmacy/[id]', params: { id: p.id } })} style={({ pressed }) => [{ padding: 16, gap: 8, backgroundColor: pressed ? colors.neutral : colors.white }, i < localPharmacies.length - 1 && s.divider]}>
+        <View style={s.list}>{!localPharmacies.length && <View style={{ padding: 20, gap: 8 }}><Text style={s.heading}>No pharmacies in this area</Text><Text style={s.muted}>Change your location to browse available listings.</Text><LocationPicker /></View>}{localPharmacies.map((p, i) => <Pressable key={p.id} accessibilityRole="link" accessibilityLabel={`View ${p.name}`} onPress={() => router.push({ pathname: '/pharmacy/[id]', params: { id: p.id } })} style={({ pressed }) => [{ padding: 16, gap: 8, backgroundColor: pressed ? colors.neutral : colors.white }, i < localPharmacies.length - 1 && s.divider]}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}><Icon name="pharmacy" size={20} color={colors.muted} /><Text style={{ fontSize: 16, lineHeight: 24, fontWeight: '600', flex: 1 }}>{p.name}</Text><Icon name="arrow-right" size={16} color={colors.muted} /></View><Text style={s.muted}>{p.address}</Text>
         </Pressable>)}</View>
       </View>
     </View>
-    {guest && <TextLink title="Pharmacy portal" icon="pharmacy" onPress={() => router.push('/partner')} />}
+    {guest && <TextLink title="Partner with us" icon="pharmacy" onPress={() => router.push('/partnership')} />}
   </Page>;
 }

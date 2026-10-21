@@ -6,6 +6,9 @@ export type PrescriptionStatus = 'draft' | 'pending' | 'approved' | 'partially_a
 export type Prescription = { managed?: boolean; id: string; revision: number; createdAt: number; updatedAt: number; file: PrescriptionFile; status: PrescriptionStatus; requested: RequestLine[]; pharmacyId: string; approved: RequestLine[]; note: string };
 export type Approval = { prescriptionId: string; revision: number; pharmacyId: string; medicineId: string; quantity: number; reviewedAt: number };
 export const prescriptionLabels: Record<PrescriptionStatus, string> = { draft: 'Draft', pending: 'Awaiting review', approved: 'Approved · demo', partially_approved: 'Partially approved · demo', rejected: 'Rejected · demo', needs_clearer_photo: 'Clearer photo needed' };
+export function prescriptionLabel(record: Pick<Prescription, 'managed' | 'status'>): string {
+  return record.managed ? { draft: 'Draft', pending: 'Awaiting pharmacist', approved: 'Pharmacist approved', partially_approved: 'Partially approved', rejected: 'Rejected', needs_clearer_photo: 'Clearer photo needed' }[record.status] : prescriptionLabels[record.status];
+}
 export function fileIssue(file: PrescriptionFile): string {
   if (!file.uri || !file.name.trim()) return 'Choose a file first.';
   if (!['image/jpeg', 'image/png', 'application/pdf'].includes(file.mimeType)) return 'Choose a JPG, PNG, or PDF file.';

@@ -13,9 +13,9 @@ import { addressText } from '../../../domain/checkout';
 
 export default function OrderTracking() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { orders } = useOrders(); const order = orders.find(order => order.id === id);
+  const { orders, loading, syncIssue } = useOrders(); const order = orders.find(order => order.id === id);
   const wide = useWindowDimensions().width >= 900;
-  if (!order) return <Page><MissingOrder /></Page>;
+  if (!order) return <Page>{loading ? <Text style={s.muted}>Loading order...</Text> : <><MissingOrder />{!!syncIssue && <Text accessibilityRole="alert">{syncIssue}</Text>}</>}</Page>;
   return <Page><OrderHeading title="Order tracking" order={order} /><OrderStatusPanel order={order} />
     <View style={{ flexDirection: wide ? 'row' : 'column', gap: 24, alignItems: 'flex-start' }}>
       <View style={{ flex: wide ? 1 : undefined, width: wide ? undefined : '100%', gap: 24 }}><OrderDestination order={order} /><Card><Text style={s.heading}>{order.method === 'delivery' ? 'Delivery area' : 'Pickup area'}</Text><DestinationMap address={order.method === 'delivery' ? (order.address ? addressText(order.address) : '') : order.pharmacy.address} barangay={order.method === 'delivery' ? order.address?.barangay : undefined} city={order.method === 'delivery' ? order.address?.city : undefined} tracking={order.method === 'delivery'} verifiedPoint={order.method === 'pickup' ? order.pharmacy.point : undefined} /></Card><OrderTimeline order={order} /></View>

@@ -2,12 +2,13 @@ import { useEffect, useState, type PropsWithChildren } from 'react';
 import { Alert, Linking, Pressable, Switch, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { ApiError, api, setSession, type Rider, type RiderDelivery } from '../api/client';
+import { ApiError, api, type Rider, type RiderDelivery } from '../api/client';
 import { Back, Badge, Button, Card, DetailRow, Page, Text, colors, s } from '../components/ui';
-import { CheckoutField } from '../components/checkout-field';
 import { ProfileLinks } from '../components/profile-links';
+import { CheckoutField } from '../components/checkout-field';
 import { DestinationMap } from '../components/destination-map';
 import { osmSearchUrl } from '../domain/maps';
+import { useProfile } from '../state/profile';
 
 const errorText = (error: unknown) => error instanceof ApiError ? error.message : 'Could not connect to the rider service. Check your connection and try again.';
 const addressText = (address: Record<string, string>) => [address.line1, address.line2, address.barangay, address.city, address.province, address.postalCode].filter(Boolean).join(', ') || Object.values(address).filter(Boolean).join(', ') || 'Address not provided';
@@ -24,15 +25,10 @@ function useRider() {
   return { rider, setRider, issue };
 }
 
-export function RiderLogin() {
-  const [email, setEmail] = useState(''); const [password, setPassword] = useState(''); const [issue, setIssue] = useState(''); const [busy, setBusy] = useState(false);
-  return <Page><Back title="Rider sign in" onBack={() => router.replace('/')} /><Card><Text style={s.muted}>Use your approved rider account.</Text><CheckoutField label="Email address" value={email} onChangeText={setEmail} placeholder="rider@example.com" keyboardType="email-address" autoCapitalize="none" autoCorrect={false} /><CheckoutField label="Password" value={password} onChangeText={setPassword} secureTextEntry showPasswordToggle autoCapitalize="none" />{!!issue && <Text accessibilityRole="alert" style={{ color: colors.danger }}>{issue}</Text>}<Button title={busy ? 'Signing in…' : 'Sign in'} disabled={busy} onPress={async () => { setBusy(true); setIssue(''); try { const session = await api.riderLogin({ email: email.trim(), password }); await setSession(session); setPassword(''); router.replace('/rider'); } catch (e) { setIssue(errorText(e)); } finally { setBusy(false); } }} /></Card></Page>;
-}
-
 export function RiderDashboard() {
   const { rider, issue } = useRider(); const [rows, setRows] = useState<RiderDelivery[]>([]); const [loadIssue, setLoadIssue] = useState('');
   useEffect(() => { let live = true; const refresh = () => api.riderDeliveries('active').then(value => { if (live) { setRows(value); setLoadIssue(''); } }).catch(e => { if (live) setLoadIssue(errorText(e)); }); refresh(); const timer = setInterval(refresh, 20000); return () => { live = false; clearInterval(timer); }; }, []);
-  if (issue) return <Page><Back title="Rider dashboard" /><Card><Text>{issue}</Text><Button title="Rider sign in" onPress={() => router.replace('/rider/login')} /></Card></Page>;
+  if (issue) return <Page><Back title="Rider dashboard" /><Card><Text>{issue}</Text><Button title="Sign in" onPress={() => router.replace({ pathname: '/account/sign-in', params: { returnTo: '/rider' } })} /></Card></Page>;
   const current = rows.find(d => !['offered', 'declined'].includes(d.status)) ?? rows[0];
   return <Page><View style={s.between}><View><Text style={s.title}>Hello, {rider?.full_name.split(' ')[0] ?? 'Rider'}</Text></View><Pressable onPress={() => router.push('/rider/profile')}><Badge text={rider?.available ? 'Available' : 'Offline'} neutral={!rider?.available} /></Pressable></View><View style={[s.row, { gap: 10 }]}><Card><Text style={s.caption}>Active deliveries</Text><Text style={s.title}>{rows.filter(active).length}</Text></Card><Card><Text style={s.caption}>Awaiting response</Text><Text style={s.title}>{rows.filter(d => d.status === 'offered').length}</Text></Card></View><View style={s.between}><Text style={s.heading}>Current delivery</Text><Pressable onPress={() => router.push('/rider/deliveries')}><Text style={s.link}>View all</Text></Pressable></View>{loadIssue ? <Card><Text style={{ color: colors.danger }}>{loadIssue}</Text><Button title="Try again" secondary onPress={() => api.riderDeliveries('active').then(setRows).catch(e => setLoadIssue(errorText(e)))} /></Card> : current ? <DeliveryCard item={current} /> : <Card><Text style={s.heading}>No assigned deliveries</Text><Text style={s.muted}>New offers from dispatch will appear here.</Text></Card>}<Card><Text style={s.caption}>RIDER SAFETY</Text><Text style={s.muted}>Prescription details are not shown. Confirm the package with pharmacy staff and never open it.</Text></Card></Page>;
 }
@@ -41,7 +37,7 @@ export function RiderDeliveries({ history = false }: { history?: boolean }) {
   const [rows, setRows] = useState<RiderDelivery[]>([]); const [issue, setIssue] = useState(''); const [busy, setBusy] = useState(true);
   const [query, setQuery] = useState(''); const [historyFilter, setHistoryFilter] = useState('all');
   async function load() { setBusy(true); try { setRows(await api.riderDeliveries(history ? 'history' : 'active')); setIssue(''); } catch (e) { setIssue(errorText(e)); } finally { setBusy(false); } }
-  useEffect(() => { load(); }, [history]);
+  useEffect(() => { void load(); const timer = setInterval(() => void load(), 20000); return () => clearInterval(timer); }, [history]);
   const list = rows.filter(item => (history || active(item)) && (!history || historyFilter === 'all' || item.status === historyFilter) && `${item.order_reference} ${item.customer_name} ${addressText(item.delivery_address)}`.toLowerCase().includes(query.trim().toLowerCase()));
   const filters = [['all', 'All'], ['delivered', 'Delivered'], ['unsuccessful', 'Unsuccessful'], ['returned', 'Returned']];
   return <Page><Back title={history ? 'Delivery history' : 'Deliveries'} /><TextInput accessibilityLabel="Search deliveries" value={query} onChangeText={setQuery} placeholder="Search reference, recipient, or address" style={[s.input, { backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line, borderRadius: 8, paddingHorizontal: 12 }]} />{history && <View style={[s.row, { gap: 8 }]}>{filters.map(([key, label]) => <Pressable key={key} onPress={() => setHistoryFilter(key)} style={{ minHeight: 40, justifyContent: 'center', paddingHorizontal: 12, borderRadius: 20, backgroundColor: historyFilter === key ? colors.pale : colors.white, borderWidth: 1, borderColor: historyFilter === key ? colors.teal : colors.line }}><Text style={{ color: historyFilter === key ? colors.teal : colors.muted, fontWeight: '600' }}>{label}</Text></Pressable>)}</View>}{issue ? <Card><Text style={{ color: colors.danger }}>{issue}</Text><Button title="Retry" onPress={load} /></Card> : busy ? <Text style={s.muted}>Loading assignments…</Text> : list.length ? list.map(row => <DeliveryCard key={row.id} item={row} />) : <Card><Text style={s.heading}>{history ? 'No matching delivery history' : 'No matching active deliveries'}</Text><Text style={s.muted}>{history ? 'Completed and unsuccessful assignments will appear here.' : 'New offers from dispatch will appear here.'}</Text></Card>}</Page>;
@@ -49,9 +45,9 @@ export function RiderDeliveries({ history = false }: { history?: boolean }) {
 
 export function RiderDeliveryDetail() {
   const { id } = useLocalSearchParams<{ id: string }>(); const [item, setItem] = useState<RiderDelivery | null>(null); const [issue, setIssue] = useState(''); const [code, setCode] = useState(''); const [note, setNote] = useState(''); const [proof, setProof] = useState<ImagePicker.ImagePickerAsset | null>(null); const [busy, setBusy] = useState(false);
-  async function load() { try { setItem((await api.riderDeliveries()).find(d => d.id === id) ?? null); setIssue(''); } catch (e) { setIssue(errorText(e)); } }
-  useEffect(() => { load(); }, [id]);
-  if (!item) return <Page><Back title="Delivery details" />{!!issue ? <Card><Text style={{ color: colors.danger }}>{issue}</Text><Button title="Rider sign in" onPress={() => router.replace('/rider/login')} /></Card> : <Text style={s.muted}>Loading delivery…</Text>}</Page>;
+  async function load() { try { const found = (await api.riderDeliveries()).find(d => d.id === id) ?? null; setItem(found); if (!found) setIssue('This delivery is not available in your account.'); } catch (e) { setIssue(errorText(e)); } }
+  useEffect(() => { void load(); const timer = setInterval(() => void load(), 20000); return () => clearInterval(timer); }, [id]);
+  if (!item) return <Page><Back title="Delivery details" />{!!issue ? <Card><Text style={{ color: colors.danger }}>{issue}</Text><Button title="Sign in" onPress={() => router.replace({ pathname: '/account/sign-in', params: { returnTo: '/rider' } })} /></Card> : <Text style={s.muted}>Loading delivery…</Text>}</Page>;
   const isCod = ['cod', 'cash_on_delivery'].includes(item.payment_method.toLowerCase()); const next = nextStatus[item.status];
   async function advance() {
     if (!next) return;
@@ -71,6 +67,7 @@ export function RiderIssue() {
 }
 
 export function RiderProfile() {
+  const { signOut } = useProfile();
   const { rider, setRider, issue } = useRider(); const [busy, setBusy] = useState(false);
-  return <Page><Back title="Rider profile" />{issue ? <Card><Text style={{ color: colors.danger }}>{issue}</Text><Button title="Sign in" onPress={() => router.replace('/rider/login')} /></Card> : <><Card><Text style={s.heading}>{rider?.full_name}</Text><Text style={s.muted}>{rider?.email}</Text><Text style={s.muted}>{rider?.phone}</Text><DetailRow label="Vehicle" value={rider?.vehicle || 'Not specified'} /></Card><Card><View style={s.between}><View style={{ flex: 1 }}><Text style={s.heading}>Available</Text><Text style={s.muted}>Receive offers from dispatch.</Text></View><Switch accessibilityLabel="Available" value={rider?.available ?? false} onValueChange={async value => { setBusy(true); try { setRider(await api.riderSetAvailability(value)); } catch (e) { Alert.alert('Could not update status', errorText(e)); } finally { setBusy(false); } }} disabled={busy} trackColor={{ true: colors.teal }} /></View></Card><Button title="Sign out" secondary onPress={async () => { await api.logout(); router.replace('/rider/login'); }} /></>}<ProfileLinks /></Page>;
+  return <Page><Back title="Rider profile" />{issue ? <Card><Text style={{ color: colors.danger }}>{issue}</Text><Button title="Sign in" onPress={() => router.replace({ pathname: '/account/sign-in', params: { returnTo: '/rider' } })} /></Card> : <><Card><Text style={s.heading}>{rider?.full_name}</Text><Text style={s.muted}>{rider?.email}</Text><Text style={s.muted}>{rider?.phone}</Text><DetailRow label="Vehicle" value={rider?.vehicle || 'Not specified'} /></Card><Card><View style={s.between}><View style={{ flex: 1 }}><Text style={s.heading}>Available</Text><Text style={s.muted}>Receive offers from dispatch.</Text></View><Switch accessibilityLabel="Available" value={rider?.available ?? false} onValueChange={async value => { setBusy(true); try { setRider(await api.riderSetAvailability(value)); } catch (e) { Alert.alert('Could not update status', errorText(e)); } finally { setBusy(false); } }} disabled={busy} trackColor={{ true: colors.teal }} /></View></Card><Button title="Sign out" secondary onPress={async () => { await signOut(); router.replace({ pathname: '/account/sign-in', params: { returnTo: '/rider' } }); }} /></>}<ProfileLinks /></Page>;
 }

@@ -1,4 +1,5 @@
-import { useRef, useState, useId, type ComponentRef } from 'react';
+import { useRef, useState, type ComponentRef } from 'react';
+import * as Crypto from 'expo-crypto';
 import { View, Pressable, ScrollView, TextInput, useWindowDimensions, KeyboardAvoidingView, Platform } from 'react-native';
 import { router } from 'expo-router';
 import { useCart } from '../state/cart';
@@ -17,7 +18,7 @@ export default function Checkout() {
   const { items, setItems } = useCart();
   const { draft, setDraft } = useCheckout();
   const { placeOrder, approvals } = useOrders();
-  const submissionKey = useId();
+  const [submissionKey] = useState(() => Crypto.randomUUID());
   const submitting = useRef(false);
   const [submitError, setSubmitError] = useState('');
   const [placedId, setPlacedId] = useState<string | null>(null);
@@ -64,11 +65,11 @@ export default function Checkout() {
         <View style={{ flex: wide ? 1 : undefined, width: wide ? undefined : '100%', gap: 24 }}>
           <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}><Icon name="pharmacy" color={colors.muted} /><View style={{ flex: 1, gap: 4 }}><Text style={s.caption}>Your selected pharmacy</Text><Text style={s.heading}>{quote.pharmacy.name}</Text><Text style={s.muted}>{quote.pharmacy.address}</Text></View></View>
           <View style={{ gap: 12 }}><Text accessibilityRole="header" style={s.heading}>Order items</Text><View style={s.list}>{quote.lines.map((line, index) => <View key={line.medicine.id} style={[{ padding: 16, gap: 8 }, index < quote.lines.length - 1 && s.divider]}>
-            <Text style={{ fontWeight: '600' }}>{line.medicine.name}</Text>{line.approval && <Badge text={`Demo Rx review · ${line.approval.prescriptionId} v${line.approval.revision}`} />}<Text style={s.muted}>{line.medicine.strength} · {line.medicine.form}</Text><View style={s.between}><Text style={s.muted}>{line.quantity} {line.medicine.unit}{line.quantity === 1 ? '' : 's'} × {money(line.unitPrice)}</Text><Text style={s.price}>{money(line.subtotal)}</Text></View>
+            <Text style={{ fontWeight: '600' }}>{line.medicine.name}</Text>{line.approval && <Badge text={`${line.medicine.live ? 'Pharmacist review' : 'Demo Rx review'} · ${line.approval.prescriptionId} v${line.approval.revision}`} />}<Text style={s.muted}>{line.medicine.strength} · {line.medicine.form}</Text><View style={s.between}><Text style={s.muted}>{line.quantity} {line.medicine.unit}{line.quantity === 1 ? '' : 's'} × {money(line.unitPrice)}</Text><Text style={s.price}>{money(line.subtotal)}</Text></View>
           </View>)}</View><TextLink title="Edit cart" icon="arrow-right" onPress={() => router.push('/cart')} /></View>
           {review ? <>
             <Card><Text style={s.heading}>Recipient</Text><Text style={s.text}>{draft.name.trim()}</Text><Text style={s.text}>{draft.phone.trim()}</Text></Card>
-            <Card><Text style={s.heading}>{draft.method === 'delivery' ? 'Delivery address' : 'Pickup at pharmacy'}</Text><Text style={s.text}>{draft.method === 'delivery' && draft.address ? addressText(draft.address) : quote.pharmacy.address}</Text>{draft.method === 'pickup' && <Text style={s.muted}>Sample opening hours: {quote.pharmacy.hours}</Text>}</Card>
+            <Card><Text style={s.heading}>{draft.method === 'delivery' ? 'Delivery address' : 'Pickup at pharmacy'}</Text><Text style={s.text}>{draft.method === 'delivery' && draft.address ? addressText(draft.address) : quote.pharmacy.address}</Text>{draft.method === 'pickup' && <Text style={s.muted}>Opening hours: {quote.pharmacy.hours}</Text>}</Card>
           </> : <>
             <View style={{ gap: 12 }}><Text accessibilityRole="header" style={s.heading}>Receive your order</Text><View accessibilityRole="radiogroup" style={{ flexDirection: wide ? 'row' : 'column', gap: 12 }}>{methods.map(method => {
               const selected = draft.method === method.value;
@@ -82,7 +83,7 @@ export default function Checkout() {
               <CheckoutField ref={phoneRef} label="Mobile number *" placeholder="09XXXXXXXXX or +639XXXXXXXXX" value={draft.phone} onChangeText={phone => setDraft(previous => ({ ...previous, phone }))} error={errors.phone} maxLength={24} keyboardType="phone-pad" autoCorrect={false} autoCapitalize="none" returnKeyType="done" />
             </Card>
             <Card><Text accessibilityRole="header" style={s.heading}>{draft.method === 'delivery' ? 'Delivery address' : 'Pickup location'}</Text>
-              {draft.method === 'pickup' ? <><Text style={s.text}>{quote.pharmacy.name}</Text><Text style={s.muted}>{quote.pharmacy.address}</Text><Text style={s.muted}>Sample opening hours: {quote.pharmacy.hours}</Text></> : <>
+              {draft.method === 'pickup' ? <><Text style={s.text}>{quote.pharmacy.name}</Text><Text style={s.muted}>{quote.pharmacy.address}</Text><Text style={s.muted}>Opening hours: {quote.pharmacy.hours}</Text></> : <>
                 <Text style={s.muted}>{draft.address ? addressText(draft.address) : 'Add the address where you would like to receive your items.'}</Text>
                 {!!errors.address && <Text accessibilityRole="alert" style={{ color: colors.danger, fontSize: 14, lineHeight: 22 }}>{errors.address}</Text>}
                 <Button title={draft.address ? 'Edit delivery address' : 'Add delivery address'} secondary icon="map-pin" onPress={() => setEditingAddress(true)} />

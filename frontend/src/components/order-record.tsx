@@ -11,7 +11,7 @@ export function OrderHeading({ order, title }: { order: DemoOrder; title: string
 
 export function OrderItems({ order }: { order: DemoOrder }) {
   return <View style={{ gap: 12 }}><Text accessibilityRole="header" style={s.heading}>Order items</Text><View style={s.list}>{order.lines.map((line, index) => <View key={line.medicine.id} style={[{ padding: 16, gap: 8 }, index < order.lines.length - 1 && s.divider]}>
-    <Text style={{ fontWeight: '600' }}>{line.medicine.name}</Text>{line.approval && <Badge text={`Demo Rx review · ${line.approval.prescriptionId} v${line.approval.revision}`} />}<Text style={s.muted}>{line.medicine.strength} · {line.medicine.form}</Text><View style={s.between}><Text style={s.muted}>{line.quantity} {line.medicine.unit}{line.quantity === 1 ? '' : 's'} × {money(line.unitPrice)}</Text><Text style={s.price}>{money(line.subtotal)}</Text></View>
+    <Text style={{ fontWeight: '600' }}>{line.medicine.name}</Text>{line.approval && <Badge text={`${line.medicine.live ? 'Pharmacist review' : 'Demo Rx review'} · ${line.approval.prescriptionId} v${line.approval.revision}`} />}<Text style={s.muted}>{line.medicine.strength} · {line.medicine.form}</Text><View style={s.between}><Text style={s.muted}>{line.quantity} {line.medicine.unit}{line.quantity === 1 ? '' : 's'} × {money(line.unitPrice)}</Text><Text style={s.price}>{money(line.subtotal)}</Text></View>
   </View>)}</View></View>;
 }
 
@@ -20,7 +20,7 @@ export function OrderRecipient({ order }: { order: DemoOrder }) {
 }
 
 export function OrderDestination({ order }: { order: DemoOrder }) {
-  return <Card><Text style={s.heading}>{order.method === 'delivery' ? 'Delivery address' : 'Pickup location'}</Text>{order.method === 'pickup' && <Text style={s.text}>{order.pharmacy.name}</Text>}<Text style={s.text}>{order.method === 'delivery' && order.address ? addressText(order.address) : order.pharmacy.address}</Text>{order.method === 'pickup' && <Text style={s.muted}>Sample opening hours: {order.pharmacy.hours}</Text>}</Card>;
+  return <Card><Text style={s.heading}>{order.method === 'delivery' ? 'Delivery address' : 'Pickup location'}</Text>{order.method === 'pickup' && <Text style={s.text}>{order.pharmacy.name}</Text>}<Text style={s.text}>{order.method === 'delivery' && order.address ? addressText(order.address) : order.pharmacy.address}</Text>{order.method === 'pickup' && <Text style={s.muted}>Opening hours: {order.pharmacy.hours}</Text>}</Card>;
 }
 
 export function MissingOrder() {

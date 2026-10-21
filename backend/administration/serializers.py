@@ -1,3 +1,4 @@
+from pathlib import Path
 from rest_framework import serializers
 from .models import MedicineRequest, PharmacyApplication, PharmacyDocument, ReviewEvent
 
@@ -9,11 +10,16 @@ class EventSerializer(serializers.ModelSerializer):
 
 
 class DocumentSerializer(serializers.ModelSerializer):
+    file_name = serializers.SerializerMethodField()
+
+    def get_file_name(self, obj):
+        return obj.get_kind_display() + Path(obj.file.name).suffix.lower()
+
     name = serializers.CharField(source="get_kind_display")
 
     class Meta:
         model = PharmacyDocument
-        fields = ("id", "kind", "name", "created_at")
+        fields = ("id", "kind", "name", "created_at", "file_name")
 
 
 class PharmacySerializer(serializers.ModelSerializer):
@@ -28,7 +34,7 @@ class PharmacySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = PharmacyApplication
-        fields = ("id", "name", "address", "applicant", "email", "phone", "status", "notes", "version", "created_at", "documents", "history", "point")
+        fields = ("id", "name", "address", "applicant", "email", "phone", "status", "notes", "version", "created_at", "documents", "history", "point", "contact_numbers", "hours", "opening_schedule")
         read_only_fields = fields
 
 

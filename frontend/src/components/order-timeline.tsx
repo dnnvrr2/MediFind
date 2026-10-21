@@ -4,7 +4,7 @@ import { Card, Text, colors, s } from './ui';
 import { Icon } from './icon';
 
 export function OrderTimeline({ order }: { order: DemoOrder }) {
-  const steps = timelineSteps(order.method);
+  const steps = timelineSteps(order.method, !!order.managed);
   return <Card><Text accessibilityRole="header" style={s.heading}>Order progress</Text>
     {steps.map((step, index) => {
       const event = order.events.find(event => event.status === step.status);

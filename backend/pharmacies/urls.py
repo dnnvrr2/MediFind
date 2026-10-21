@@ -1,6 +1,9 @@
 from django.urls import path
 from . import views
 urlpatterns = [
+    path("invitations/", views.InvitationsView.as_view()),
+    path("invitations/<uuid:pk>/accept/", views.InvitationAcceptView.as_view()),
+    path("invitations/<uuid:pk>/cancel/", views.InvitationCancelView.as_view()),
     path("me/", views.MeView.as_view()),
     path("application/submit/", views.SubmitApplicationView.as_view()),
     path("documents/<int:pk>/", views.OwnDocumentView.as_view()),

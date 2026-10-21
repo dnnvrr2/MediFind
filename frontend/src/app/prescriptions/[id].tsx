@@ -7,7 +7,7 @@ import { usePrescriptions } from '../../state/prescriptions';
 import { useCart } from '../../state/cart';
 import { useOrders } from '../../state/orders';
 import { addItem } from '../../domain/cart';
-import { pharmacyEstimate, prescriptionLabels, type Prescription, type PrescriptionFile, type RequestLine } from '../../domain/prescriptions';
+import { pharmacyEstimate, prescriptionLabels, prescriptionLabel, type Prescription, type PrescriptionFile, type RequestLine } from '../../domain/prescriptions';
 import { useCatalog, medicines, pharmacies, offers, money } from '../../data/catalog';
 import { Page, Back, Card, Badge, Button, Quantity, TextLink, Text, colors, s } from '../../components/ui';
 import { FilePreview, PrescriptionPicker } from '../../components/prescription-file';
@@ -37,7 +37,7 @@ function Draft({ record }: { record: Prescription }) {
       })}
     </View></>}
     {!!error && <Text accessibilityRole="alert" style={{ color: colors.danger }}>{error}</Text>}
-    <Button title="Submit for demo review" icon="prescription" disabled={(!live && !record.requested.length) || !record.pharmacyId} onPress={() => { const result = submit(record.id, record.requested, record.pharmacyId); if (!result.ok) setError(result.issue); }} />
+    <Button title={live ? "Submit to pharmacist" : "Submit for demo review"} icon="prescription" disabled={(!live && !record.requested.length) || !record.pharmacyId} onPress={() => { const result = submit(record.id, record.requested, record.pharmacyId); if (!result.ok) setError(result.issue); }} />
   </>;
 }
 
@@ -83,7 +83,8 @@ function ApprovedItems({ record }: { record: Prescription }) {
   }
   return <Card><Text style={s.heading}>Review approved items</Text><Text style={s.muted}>Choose approved quantities for your cart. Creating an order consumes this approval, even if cancelled.</Text>
     {(record.managed ? record.approved : record.requested).map(request => {
-      const m = medicines.find(m => m.id === request.medicineId)!;
+      const m = medicines.find(m => m.id === request.medicineId);
+      if (!m) return <View key={request.medicineId} style={{ gap: 8 }}><Text style={s.muted}>An approved medicine is currently unavailable in the catalog. Refresh the catalog or contact the pharmacy.</Text></View>;
       const approved = record.approved.find(l => l.medicineId === m.id)?.quantity ?? 0;
       const remaining = grants.find(g => g.medicineId === m.id)?.quantity ?? 0;
       const inCart = items.find(i => i.medicineId === m.id && i.prescriptionId === record.id && i.revision === record.revision)?.quantity ?? 0;
@@ -108,7 +109,7 @@ function ApprovedItems({ record }: { record: Prescription }) {
 export default function PrescriptionDetail() {
   useCatalog();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { records, replace, loading, syncIssue, refresh } = usePrescriptions();
+  const { records, replace, loading, syncIssue, refresh, retrySync } = usePrescriptions();
   const record = records.find(r => r.id === id);
   const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
   useEffect(() => { scrollRef.current?.scrollTo({ y: 0, animated: false }); }, [record?.status, record?.revision]);
@@ -117,13 +118,14 @@ export default function PrescriptionDetail() {
   const [error, setError] = useState('');
   if (!record) return <Page><Back title="Prescription details" />{loading ? <Text style={s.muted}>Loading saved prescription…</Text> : <><Text style={s.muted}>This prescription is not available in your account.</Text><Button title="Prescription history" onPress={() => router.replace('/prescriptions')} /></>}</Page>;
   function replaceFile(file: PrescriptionFile) { const result = replace(id, file); if (!result.ok) setError(result.issue); setReplacement(null); }
-  return <Page scrollRef={scrollRef}><Back title={record.status === 'draft' ? 'Review your prescription file' : 'Prescription details'} onBack={() => router.navigate('/prescriptions')} /><View style={s.between}><Text style={s.heading}>{record.id} · Version {record.revision}</Text><Badge text={record.managed ? ({ approved: 'Pharmacist approved', partially_approved: 'Partially approved', pending: 'Awaiting pharmacist', rejected: 'Rejected', needs_clearer_photo: 'Clearer photo needed', draft: 'Draft' })[record.status] : prescriptionLabels[record.status]} warning={record.status === 'pending' || record.status === 'needs_clearer_photo'} neutral={record.status === 'draft' || record.status === 'rejected'} /></View>
-    <View style={{ flexDirection: wide ? 'row' : 'column', gap: 24, alignItems: 'flex-start' }}><View style={{ width: wide ? 340 : '100%', gap: 16 }}><Card><FilePreview key={record.file.uri} file={record.file} />{record.file.uri.startsWith('remote:') && <PrivateDocument name={record.file.name} load={() => api.customerPrescriptionFile(record.file.uri.slice(7))} />}{record.status !== 'pending' && <PrescriptionPicker replacement onPick={file => record.approved.length ? setReplacement(file) : replaceFile(file)} />}</Card>{!!syncIssue && <Text accessibilityRole="alert" style={{ color: colors.danger }}>{syncIssue}</Text>}<Text style={s.caption}>{record.managed ? 'Private file - Pharmacist review' : 'Private file - Simulated review'}</Text></View>
+  return <Page scrollRef={scrollRef}><Back title={record.status === 'draft' ? 'Review your prescription file' : 'Prescription details'} onBack={() => router.navigate('/prescriptions')} /><View style={s.between}><Text style={s.heading}>{record.id} · Version {record.revision}</Text><Badge text={prescriptionLabel(record)} warning={record.status === 'pending' || record.status === 'needs_clearer_photo'} neutral={record.status === 'draft' || record.status === 'rejected'} /></View>
+    <View style={{ flexDirection: wide ? 'row' : 'column', gap: 24, alignItems: 'flex-start' }}><View style={{ width: wide ? 340 : '100%', gap: 16 }}><Card><FilePreview key={record.file.uri} file={record.file} />{record.file.uri.startsWith('remote:') && <PrivateDocument name={record.file.name} load={() => api.customerPrescriptionFile(record.file.uri.slice(7))} />}{record.status !== 'pending' && <PrescriptionPicker replacement onPick={file => record.approved.length ? setReplacement(file) : replaceFile(file)} />}</Card>{!!syncIssue && <><Text accessibilityRole="alert" style={{ color: colors.danger }}>{syncIssue}</Text><Button title="Retry sync" secondary onPress={() => void retrySync()} /></>}<Text style={s.caption}>{record.managed ? 'Private file - Pharmacist review' : 'Private file - Simulated review'}</Text></View>
     <View style={{ flex: wide ? 1 : undefined, width: wide ? undefined : '100%', gap: 20 }}>
       {record.status !== 'draft' && <Card><Text style={s.heading}>{pharmacies.find(p => p.id === record.pharmacyId)?.name}</Text>{record.requested.map(l => {
-        const m = medicines.find(m => m.id === l.medicineId)!;
+        const m = medicines.find(m => m.id === l.medicineId);
+        if (!m) return <Text key={l.medicineId} style={s.muted}>Requested medicine is currently unavailable.</Text>;
         return <View key={m.id} style={{ gap: 3 }}><Text style={s.text}>{m.name} · {m.strength}</Text><Text style={s.muted}>{l.quantity} {m.unit}{l.quantity === 1 ? '' : 's'} requested · {m.form}</Text></View>;
-      })}{!!record.note && <Text style={s.text}>Review reason: {record.note}</Text>}{record.status === 'rejected' && <Text style={s.muted}>No items approved. Replace the file to start another demo review.</Text>}{record.status === 'needs_clearer_photo' && <Text style={s.muted}>Upload a clearer image and resubmit.</Text>}</Card>}
+      })}{!!record.note && <Text style={s.text}>Review reason: {record.note}</Text>}{record.status === 'rejected' && <Text style={s.muted}>No items approved. Replace the file to start another review.</Text>}{record.status === 'needs_clearer_photo' && <Text style={s.muted}>Upload a clearer image and resubmit.</Text>}</Card>}
       {record.status === 'draft' && <Draft key={`${record.id}-${record.revision}`} record={record} />}
       {record.status === 'pending' && (record.managed ? <Card><Text style={s.heading}>Awaiting pharmacist review</Text><Text style={s.muted}>Ordering remains disabled until the assigned pharmacist approves your items.</Text><Button title="Refresh review" secondary onPress={() => void refresh()} /></Card> : <ReviewControls key={`${record.id}-${record.revision}`} record={record} />)}
       {(record.status === 'approved' || record.status === 'partially_approved') && <ApprovedItems key={`${record.id}-${record.revision}`} record={record} />}

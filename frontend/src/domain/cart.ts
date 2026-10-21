@@ -1,6 +1,6 @@
 import { medicines, offers } from '../data/catalog.ts';
 import { approvalFor, type Approval } from './prescriptions.ts';
-export type CartItem = { medicineId: string; pharmacyId: string; quantity: number; prescriptionId?: string; revision?: number };
+export type CartItem = { medicineId: string; pharmacyId: string; quantity: number; prescriptionId?: string; revision?: number; snapshot?: { name: string; strength: string; form: string } };
 export type AddResult = { kind: 'added'; items: CartItem[] } | { kind: 'replace' | 'unavailable' | 'prescription' | 'stock'; items: CartItem[] };
 export function addItem(items: CartItem[], medicineId: string, pharmacyId: string, quantity: number, replace = false, grants: Approval[] = [], prescriptionId?: string, revision?: number): AddResult {
   const medicine = medicines.find(m => m.id === medicineId);
@@ -14,7 +14,7 @@ export function addItem(items: CartItem[], medicineId: string, pharmacyId: strin
   if (prescriptionId && !approvalFor({ medicineId, pharmacyId, quantity: (existing?.quantity ?? 0) + quantity, prescriptionId, revision }, grants)) return { kind: 'prescription', items };
   if ((existing?.quantity ?? 0) + quantity > offer.stock) return { kind: 'stock', items };
   if (different && !replace) return { kind: 'replace', items };
-  return { kind: 'added', items: existing ? base.map(i => i === existing ? { ...i, quantity: i.quantity + quantity } : i) : [...base, { medicineId, pharmacyId, quantity, ...(prescriptionId ? { prescriptionId, revision } : {}) }] };
+  return { kind: 'added', items: existing ? base.map(i => i === existing ? { ...i, quantity: i.quantity + quantity } : i) : [...base, { medicineId, pharmacyId, quantity, snapshot: { name: medicine.name, strength: medicine.strength, form: medicine.form }, ...(prescriptionId ? { prescriptionId, revision } : {}) }] };
 }
 export function changeQuantity(items: CartItem[], medicineId: string, quantity: number, grants: Approval[] = []): CartItem[] {
   if (!Number.isInteger(quantity) || quantity < 1) return items;

@@ -138,16 +138,8 @@ class RiderDeliveryActionView(APIView):
             delivery.proof = upload
             delivery.cash_collected = delivery.payment_method.lower() not in {"cod", "cash_on_delivery"} or cash_confirmed
             delivery.completed_at = timezone.now()
-        elif target == "returned":
-            delivery.completed_at = timezone.now()
-        if target == "declined":
-            note = note or "Offer declined"
-        delivery.status = target
-        delivery.notes = note or delivery.notes
-        delivery.save()
-        DeliveryEvent.objects.create(delivery=delivery, actor=request.user, status=target, note=note)
-        from pharmacies.services import rider_updated
-        rider_updated(delivery, request.user)
+        from .services import transition_delivery
+        delivery = transition_delivery(delivery, request.user, target, note, confirmation_verified=target == "delivered", proof=request.FILES.get("proof"), cash_collected=delivery.cash_collected)
         return Response(RiderDeliverySerializer(delivery).data)
 
 
@@ -157,8 +149,9 @@ class RiderIssueView(APIView):
     throttle_scope = "rider_issue"
     parser_classes = [JSONParser, MultiPartParser, FormParser]
 
+    @transaction.atomic
     def post(self, request, pk):
-        delivery = get_object_or_404(RiderDelivery, pk=pk, rider=rider_for(request))
+        delivery = get_object_or_404(RiderDelivery.objects.select_for_update(), pk=pk, rider=rider_for(request))
         if delivery.status not in {"accepted", "at_pharmacy", "picked_up", "out_for_delivery"}:
             return Response({"detail": "Issues can only be reported on an active delivery."}, status=status.HTTP_400_BAD_REQUEST)
         upload = request.FILES.get("photo")
@@ -173,13 +166,8 @@ class RiderIssueView(APIView):
         serializer = IssueSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         issue = serializer.save(delivery=delivery, rider=rider_for(request), **({"photo": upload} if upload else {}))
-        delivery.status = "unsuccessful"
-        delivery.notes = issue.details[:1000]
-        delivery.save(update_fields=["status", "notes", "updated_at"])
-        DeliveryEvent.objects.create(delivery=delivery, actor=request.user, status=delivery.status, note=f"Issue reported: {issue.get_reason_display()} — {issue.details[:350]}")
-        from pharmacies.services import rider_updated
-        rider_updated(delivery, request.user)
-        delivery.refresh_from_db()
+        from .services import transition_delivery
+        delivery = transition_delivery(delivery, request.user, "unsuccessful", f"Issue reported: {issue.get_reason_display()} - {issue.details[:350]}")
         return Response({"issue": serializer.data, "delivery": RiderDeliverySerializer(delivery).data}, status=status.HTTP_201_CREATED)
 
 

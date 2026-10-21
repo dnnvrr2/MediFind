@@ -1,3 +1,8 @@
+import hashlib
+import secrets
+from datetime import timedelta
+from django.contrib.auth import get_user_model
+from rest_framework import serializers
 import copy
 from pathlib import Path
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -14,7 +19,7 @@ from administration.models import PharmacyApplication, PharmacyDocument, Medicin
 from administration.serializers import MedicineSerializer
 from administration.views import Conflict
 from riders.models import RiderProfile, RiderDelivery, DeliveryEvent
-from .models import PharmacyMember, Inventory, PrescriptionReview, PharmacyOrder
+from .models import PharmacyMember, Inventory, PrescriptionReview, PharmacyOrder, PharmacyInvitation
 from .serializers import ApplicationInput, MedicineInput, InventoryInput, DecisionInput, application_data, audit_data
 from .services import member_for, audit, public_id, medicine_data, pharmacy_data, inventory_rows, inventory_lookup, integer, order_action
 
@@ -51,7 +56,7 @@ class MeView(PharmacyView):
             raise Conflict("Wait for the application review before editing.")
         payload = ApplicationInput(app, data=request.data, partial=True)
         payload.is_valid(raise_exception=True)
-        if app.status == "Approved" and any(key not in ("phone", "hours") for key in payload.validated_data):
+        if app.status == "Approved" and any(key not in ("phone", "hours", "contact_numbers", "opening_schedule") for key in payload.validated_data):
             raise ValidationError("Approved registration details require staff review. You can update phone and opening hours.")
         payload.save(version=app.version + 1)
         audit(app, request.user, "Branch details updated")
@@ -67,9 +72,13 @@ class SubmitApplicationView(PharmacyView):
         app = PharmacyApplication.objects.select_for_update().get(pk=member.pharmacy_id)
         if app.status not in ("Draft", "Needs Info", "Rejected"):
             raise Conflict("This application is already submitted or approved.")
+        if not app.phone.strip() or not app.hours.strip():
+            raise ValidationError("Complete the branch phone and opening hours before submission.")
         kinds = set(app.documents.values_list("kind", flat=True))
         if not {"FDA", "Business", "Pharmacist"}.issubset(kinds):
             raise ValidationError("Attach all three required documents before submission.")
+        if any(not document.file or not document.file.storage.exists(document.file.name) for document in app.documents.all()):
+            raise ValidationError("A document is missing. Replace it before submission.")
         before = app.status
         app.status = "Pending"
         app.version += 1
@@ -291,18 +300,9 @@ class HandoffView(PharmacyView):
         row = get_object_or_404(PharmacyOrder.objects.select_for_update(), pk=pk, pharmacy=member.pharmacy)
         if request.data.get("version") != row.version:
             raise Conflict()
-        order = row.order
-        if order.data.get("method") != "delivery" or order.data.get("status") != "ready_for_collection":
-            raise Conflict("Only a delivery order ready for collection can be assigned.")
-        if order.rider_deliveries.exclude(status__in=["declined", "cancelled"]).exists():
-            raise Conflict("This order already has an active or completed rider assignment.")
         rider = get_object_or_404(RiderProfile, pk=request.data.get("rider_id"), approved=True, available=True, user__is_active=True)
-        data = order.data
-        delivery = RiderDelivery.objects.create(order=order, rider=rider, customer_name=data["recipient"]["name"], customer_phone=data["recipient"]["phone"], delivery_address=data["address"], pharmacy_name=member.pharmacy.name, pharmacy_address=member.pharmacy.address, payment_method="cod", amount_due=data["total"])
-        DeliveryEvent.objects.create(delivery=delivery, actor=request.user, status="offered", note="Assigned by pharmacy for sealed package collection.")
-        row.version += 1
-        row.save(update_fields=["version"])
-        audit(member.pharmacy, request.user, "Rider assigned", order.external_id, rider.user.full_name)
+        from .services import assign_rider
+        row = assign_rider(row.order, rider, request.user, request.data.get("version"))
         return Response(order_data(row))
 
 
@@ -322,7 +322,8 @@ class PublicCatalogView(APIView):
     authentication_classes = ()
     def get(self, request):
         rows = Inventory.objects.filter(medicine__status="Approved", medicine__pharmacy__status="Approved").select_related("medicine", "medicine__pharmacy")
-        medicines, pharmacies, offers = {}, {}, []
+        medicines, offers = {}, []
+        pharmacies = {str(p.pk): pharmacy_data(p) for p in PharmacyApplication.objects.filter(status="Approved")}
         for row in rows:
             m, p = row.medicine, row.medicine.pharmacy
             if not m.strength or not m.form or not m.generic:
@@ -351,3 +352,70 @@ class OwnDocumentView(PharmacyView):
         response = FileResponse(file, as_attachment=True, filename=record.get_kind_display() + Path(record.file.name).suffix)
         response["Cache-Control"] = "private, no-store"
         return response
+
+
+def invitation_data(row):
+    return {"id": str(row.pk), "pharmacy": row.pharmacy.name, "email": row.email, "role": row.role, "status": row.status, "expires_at": row.expires_at, "requires_renewal": not bool(row.code_digest)}
+
+
+class InvitationsView(PharmacyView):
+    class Input(serializers.Serializer):
+        email = serializers.EmailField()
+        role = serializers.ChoiceField(choices=("staff", "pharmacist"))
+
+    def get(self, request):
+        if request.query_params.get("scope") == "sent":
+            member = member_for(request.user)
+            if member.role != "owner":
+                raise PermissionDenied("Only the owner can manage invitations.")
+            rows = PharmacyInvitation.objects.filter(pharmacy=member.pharmacy, status="pending", expires_at__gt=timezone.now())
+        else:
+            rows = PharmacyInvitation.objects.filter(email__iexact=request.user.email, status="pending", expires_at__gt=timezone.now(), pharmacy__status="Approved")
+        return Response([invitation_data(row) for row in rows.select_related("pharmacy")])
+
+    @transaction.atomic
+    def post(self, request):
+        member = member_for(request.user)
+        if member.role != "owner":
+            raise PermissionDenied("Only the owner can invite pharmacy staff.")
+        payload = self.Input(data=request.data)
+        payload.is_valid(raise_exception=True)
+        email = payload.validated_data["email"].strip().lower()
+        if PharmacyMember.objects.filter(user__email__iexact=email).exists():
+            raise ValidationError("This account is already linked to a pharmacy.")
+        PharmacyApplication.objects.select_for_update().get(pk=member.pharmacy_id)
+        acceptance_code = secrets.token_urlsafe(24)
+        invitation, _ = PharmacyInvitation.objects.update_or_create(pharmacy=member.pharmacy, email=email, status="pending", defaults={"role": payload.validated_data["role"], "invited_by": request.user, "expires_at": timezone.now() + timedelta(days=7), "code_digest": hashlib.sha256(acceptance_code.encode()).hexdigest()})
+        audit(member.pharmacy, request.user, "Staff invited", email, invitation.role)
+        return Response({**invitation_data(invitation), "acceptance_code": acceptance_code}, status=201)
+
+
+class InvitationAcceptView(PharmacyView):
+    @transaction.atomic
+    def post(self, request, pk):
+        get_user_model().objects.select_for_update().get(pk=request.user.pk)
+        row = get_object_or_404(PharmacyInvitation.objects.select_for_update().select_related("pharmacy"), pk=pk, email__iexact=request.user.email, status="pending", expires_at__gt=timezone.now(), pharmacy__status="Approved")
+        code = request.data.get("acceptance_code", "")
+        if not isinstance(code, str) or not row.code_digest or not secrets.compare_digest(row.code_digest, hashlib.sha256(code.strip().encode()).hexdigest()):
+            raise PermissionDenied("Enter the invitation code supplied directly by the branch owner. Older invitations must be renewed.")
+        if PharmacyMember.objects.filter(user=request.user).exists():
+            raise Conflict("This account is already linked to a pharmacy.")
+        PharmacyMember.objects.create(user=request.user, pharmacy=row.pharmacy, role=row.role, verified_pharmacist=False)
+        row.status = "accepted"
+        row.code_digest = ""
+        row.save(update_fields=["status", "code_digest"])
+        audit(row.pharmacy, request.user, "Invitation accepted", row.email, row.role)
+        return Response({"detail": "You have joined the pharmacy. Pharmacist review permissions require admin verification."})
+
+
+class InvitationCancelView(PharmacyView):
+    @transaction.atomic
+    def post(self, request, pk):
+        member = member_for(request.user)
+        if member.role != "owner":
+            raise PermissionDenied("Only the owner can cancel invitations.")
+        row = get_object_or_404(PharmacyInvitation.objects.select_for_update(), pk=pk, pharmacy=member.pharmacy, status="pending")
+        row.status = "cancelled"
+        row.save(update_fields=["status"])
+        audit(member.pharmacy, request.user, "Invitation cancelled", row.email)
+        return Response({"detail": "Invitation cancelled."})

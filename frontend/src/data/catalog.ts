@@ -3,7 +3,7 @@ export type Medicine = {
   live?: boolean; id: string; name: string; generic: string; strength: string; form: string;
   unit: string; category: string; prescription: boolean; description: string;
 };
-export type Pharmacy = { point?: { lat: number; lon: number } | null; live?: boolean; isOpen?: boolean; id: string; name: string; address: string; hours: string; phone: string };
+export type Pharmacy = { contactNumbers?: string[]; point?: { lat: number; lon: number } | null; live?: boolean; isOpen?: boolean; id: string; name: string; address: string; hours: string; phone: string };
 export type Offer = { medicineId: string; pharmacyId: string; price: number; stock: number };
 
 export const medicines: Medicine[] = [

@@ -25,6 +25,7 @@ class LoginSerializer(TokenObtainPairSerializer):
     username_field = "email"
 
 class RegisterView(generics.CreateAPIView):
+    authentication_classes = ()
     serializer_class = RegisterSerializer
     permission_classes = [permissions.AllowAny]
     throttle_classes = [RegisterThrottle]
@@ -36,6 +37,7 @@ class RegisterView(generics.CreateAPIView):
         return Response({"customer": CustomerSerializer(customer).data, "access": str(refresh.access_token), "refresh": str(refresh)}, status=status.HTTP_201_CREATED)
 
 class LoginView(APIView):
+    authentication_classes = ()
     permission_classes = [permissions.AllowAny]
     throttle_classes = [LoginThrottle]
     def post(self, request):
@@ -61,6 +63,7 @@ class LogoutView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 from django.conf import settings
 class PasswordResetRequestView(APIView):
+    authentication_classes = ()
     permission_classes = [permissions.AllowAny]
     throttle_classes = [PasswordResetThrottle]
     def post(self, request):
@@ -73,6 +76,7 @@ class PasswordResetRequestView(APIView):
         return Response({"detail": "If an account exists for that email, a password reset link will be sent."})
 
 class PasswordResetConfirmView(APIView):
+    authentication_classes = ()
     permission_classes = [permissions.AllowAny]
     throttle_classes = [PasswordResetThrottle]
     def post(self, request):

@@ -51,6 +51,6 @@ export function PrescriptionPicker({ onPick, replacement = false }: { onPick: (f
   return <View style={{ gap: 12 }}><Button title={busy ? 'Selecting file…' : replacement ? 'Replace file' : 'Choose prescription file'} icon="upload" disabled={busy} onPress={() => pick(false)} />
     {Platform.OS !== 'web' && <Button title={replacement ? 'Retake photo' : 'Take a photo'} secondary icon="camera" disabled={busy} onPress={() => pick(true)} />}
     {!!error && <Text accessibilityRole="alert" style={{ color: colors.danger }}>{error}</Text>}
-    <Text style={s.caption}>JPG, PNG, or PDF - Up to 10 MB. Files are private; review is simulated.</Text>
+    <Text style={s.caption}>JPG, PNG, or PDF - Up to 10 MB. Files are private. Sample reviews are labeled.</Text>
   </View>;
 }

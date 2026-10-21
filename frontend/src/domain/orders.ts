@@ -3,7 +3,7 @@ import type { CartItem } from './cart.ts';
 import type { Approval } from './prescriptions.ts';
 import type { Pharmacy } from '../data/catalog.ts';
 
-export type OrderStatus = 'awaiting_confirmation' | 'confirmed' | 'preparing' | 'ready_for_collection' | 'ready_for_pickup' | 'collected' | 'out_for_delivery' | 'delivered' | 'cancelled' | 'rejected' | 'delivery_failed';
+export type OrderStatus = 'awaiting_confirmation' | 'confirmed' | 'preparing' | 'ready_for_collection' | 'ready_for_pickup' | 'collected' | 'out_for_delivery' | 'delivered' | 'cancelled' | 'rejected' | 'delivery_failed' | 'rider_collected' | 'delivery_issue' | 'delivery_retry' | 'returning' | 'returned';
 export type OrderEvent = { status: OrderStatus; at: number; note: string };
 export type DemoOrder = {
   managed?: boolean; id: string; submissionKey: string; createdAt: number; updatedAt: number; status: OrderStatus;
@@ -26,14 +26,19 @@ export const statusInfo: Record<OrderStatus, { label: string; description: strin
   delivered: { label: 'Delivered', description: 'Delivery has been simulated. This demo order is complete.', tone: 'success' },
   cancelled: { label: 'Cancelled', description: 'This demo order was cancelled. No payment was collected.', tone: 'neutral' },
   rejected: { label: 'Pharmacy rejected', description: 'A pharmacy rejection has been simulated. Nothing was charged.', tone: 'danger' },
+  rider_collected: { label: 'Collected by rider', description: 'The sealed package has been collected.', tone: 'neutral' },
+  delivery_issue: { label: 'Delivery issue', description: 'Dispatch is reviewing a delivery issue.', tone: 'warning' },
+  delivery_retry: { label: 'Delivery retry', description: 'Dispatch approved another delivery attempt.', tone: 'warning' },
+  returning: { label: 'Returning to pharmacy', description: 'The package is being returned.', tone: 'warning' },
+  returned: { label: 'Returned to pharmacy', description: 'The package has been returned to the pharmacy.', tone: 'neutral' },
   delivery_failed: { label: 'Delivery failed', description: 'A delivery issue has been simulated. No real delivery was attempted.', tone: 'danger' },
 };
 
 export function isCurrentOrder(order: DemoOrder): boolean {
-  return !(['collected', 'delivered', 'cancelled', 'rejected', 'delivery_failed'] as OrderStatus[]).includes(order.status);
+  return !(['collected', 'delivered', 'cancelled', 'rejected', 'delivery_failed', 'returned'] as OrderStatus[]).includes(order.status);
 }
 
-export function timelineSteps(method: Fulfillment): { status: OrderStatus; label: string }[] {
+export function timelineSteps(method: Fulfillment, managed = false): { status: OrderStatus; label: string }[] {
   return [
     { status: 'awaiting_confirmation', label: 'Order submitted' },
     { status: 'confirmed', label: 'Pharmacy confirmed' },
@@ -42,6 +47,7 @@ export function timelineSteps(method: Fulfillment): { status: OrderStatus; label
       { status: 'ready_for_pickup' as const, label: 'Ready for pickup' },
       { status: 'collected' as const, label: 'Collected' },
     ] : [
+      ...(managed ? [{ status: 'ready_for_collection' as const, label: 'Ready for rider' }, { status: 'rider_collected' as const, label: 'Collected by rider' }] : []),
       { status: 'out_for_delivery' as const, label: 'Out for delivery' },
       { status: 'delivered' as const, label: 'Delivered' },
     ]),
@@ -66,7 +72,12 @@ export function remainingApprovals(grants: Approval[], orders: DemoOrder[]): App
 
 export function createDemoOrder(state: OrdersState, items: CartItem[], draft: CheckoutDraft, submissionKey: string, at: number, grants: Approval[] = []): OrderResult {
   const existing = state.orders.find(order => order.submissionKey === submissionKey);
-  if (existing) return { ok: true, state, order: existing, created: false };
+  if (existing) {
+    const compact = (lines: { medicineId: string; pharmacyId: string; quantity: number; prescriptionId?: string; revision?: number }[]) => lines.map(line => [line.medicineId, line.pharmacyId, line.quantity, line.prescriptionId || '', line.revision || 0]).sort((a, b) => String(a[0]).localeCompare(String(b[0])));
+    const previous = existing.lines.map(line => ({ medicineId: line.medicine.id, pharmacyId: existing.pharmacy.id, quantity: line.quantity, prescriptionId: line.approval?.prescriptionId, revision: line.approval?.revision }));
+    if (items.length && (JSON.stringify(compact(items)) !== JSON.stringify(compact(previous)) || draft.method !== existing.method || draft.name.trim() !== existing.recipient.name || draft.phone.trim() !== existing.recipient.phone || (draft.method === 'delivery' && JSON.stringify(draft.address) !== JSON.stringify(existing.address)))) return { ok: false, state, issue: 'This checkout reference already belongs to another order. Start a new checkout.' };
+    return { ok: true, state, order: existing, created: false };
+  }
   if (!submissionKey.trim() || !Number.isFinite(at)) return { ok: false, state, issue: 'Could not create this demo order. Please try again.' };
   const errors = validateCheckout(draft);
   if (Object.keys(errors).length) return { ok: false, state, issue: 'Check the recipient and delivery address before submitting.' };
@@ -74,7 +85,7 @@ export function createDemoOrder(state: OrdersState, items: CartItem[], draft: Ch
   if (!quote.ok) return { ok: false, state, issue: quote.issue };
   const address = draft.method === 'delivery' && draft.address ? Object.fromEntries(Object.entries(draft.address).map(([key, value]) => [key, value.trim()])) as DeliveryAddress : null;
   const order: DemoOrder = {
-    id: `${quote.pharmacy.live ? 'ORDER-' + at + '-' : 'DEMO-'}${String(state.nextNumber).padStart(6, '0')}`, submissionKey, createdAt: at, updatedAt: at,
+    id: `${quote.pharmacy.live ? 'ORDER-' : 'DEMO-'}${submissionKey}`, submissionKey, createdAt: at, updatedAt: at,
     status: 'awaiting_confirmation', method: quote.method, pharmacy: { ...quote.pharmacy },
     lines: quote.lines.map(line => ({ ...line, medicine: { ...line.medicine }, ...(line.approval ? { approval: { ...line.approval } } : {}) })),
     recipient: { name: draft.name.trim(), phone: draft.phone.trim() }, address,

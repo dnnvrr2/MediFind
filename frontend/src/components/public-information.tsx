@@ -5,8 +5,8 @@ const information = {
   help: {
     title: 'Help',
     sections: [
-      ['Finding a medicine', 'Search by name or generic, then check strength and form. Compare sample pharmacy listings; live distances are unavailable.'],
-      ['Ordering and prescriptions', 'Sign in to use the cart or upload prescriptions. Prescription medicines need pharmacist verification. Orders and prescription reviews in this preview are simulated.'],
+      ['Finding a medicine', 'Search by name or generic, then check strength and form. Compare pharmacy listings; sample listings are labeled and live distances are unavailable.'],
+      ['Ordering and prescriptions', 'Sign in to use the cart or upload prescriptions. Prescription medicines need pharmacist verification. Approved pharmacies receive submitted orders and prescriptions. Sample listings and simulated reviews are labeled.'],
       ['Account and connection problems', 'Use Forgot password to reset access. If the service is unavailable, retry after reconnecting; your browsing selection stays in the app.'],
       ['Contact information', 'A verified MediFind support email or phone number has not been supplied. Support contact details must be configured before public launch.'],
     ],
@@ -25,7 +25,7 @@ const information = {
     title: 'Terms information',
     sections: [
       ['Draft for review', 'These preview terms need review and completion by the MediFind operator. Legal identity, contact details, service coverage, cancellations, refunds, dispute handling, and effective date are not yet supplied.'],
-      ['Using the preview', 'Catalog prices and stock are examples. Customer order submission stores a preview record; it does not reserve medicine, charge payment, or establish pharmacy acceptance. Staff-created rider assignments require direct pharmacy confirmation.'],
+      ['Using the preview', 'Sample catalog listings create order previews. Approved pharmacies can accept submitted orders, reserve stock, and arrange rider collection. Prescription orders require pharmacist approval. Payment is collected at pickup or delivery; online payments are unavailable.'],
       ['Medicine information', 'Catalog information is for finding an exact medicine and formulation. Confirm availability and suitability with a pharmacist. Prescription medicines require valid prescriptions and pharmacist verification.'],
       ['Accounts', 'Public registration creates a customer account. Rider approval and dispatch are managed by authorized staff. Keep your sign-in details private and provide accurate recipient information.'],
     ],

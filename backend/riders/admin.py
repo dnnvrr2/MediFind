@@ -18,9 +18,9 @@ class RiderDeliveryAdmin(admin.ModelAdmin):
     list_display = ("order", "rider", "status", "pharmacy_name", "created_at")
     list_filter = ("status", "payment_method", "created_at")
     search_fields = ("order__external_id", "customer_name", "rider__user__email")
-    readonly_fields = ("id", "created_at", "updated_at", "completed_at", "proof_link")
+    readonly_fields = ("id", "order", "rider", "status", "customer_name", "customer_phone", "delivery_address", "pharmacy_name", "pharmacy_address", "payment_method", "amount_due", "cash_collected", "created_at", "updated_at", "completed_at", "proof_link")
     fields = ("id", "order", "rider", "status", "customer_name", "customer_phone", "delivery_address", "pharmacy_name", "pharmacy_address", "payment_method", "amount_due", "cash_collected", "confirmation_attempts", "confirmation_locked_until", "proof_link", "notes", "created_at", "updated_at", "completed_at")
-    actions = ("resolve_as_retry", "resolve_as_return")
+    actions = ("resolve_as_retry", "resolve_as_return", "cancel_assignment")
 
     def get_urls(self):
         return [path("<uuid:pk>/proof/", self.admin_site.admin_view(self.proof_view), name="riders_riderdelivery_proof")] + super().get_urls()
@@ -46,36 +46,43 @@ class RiderDeliveryAdmin(admin.ModelAdmin):
         response["Content-Disposition"] = "inline"
         return response
 
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
     def save_model(self, request, obj, form, change):
-        old_status = RiderDelivery.objects.filter(pk=obj.pk).values_list("status", flat=True).first() if change else None
-        super().save_model(request, obj, form, change)
-        if obj.status in {"delivered", "returned", "cancelled"} and not obj.completed_at:
-            obj.completed_at = timezone.now()
-            obj.save(update_fields=("completed_at",))
-        if old_status != obj.status:
-            DeliveryEvent.objects.create(delivery=obj, actor=request.user, status=obj.status, note="Status updated by dispatch.")
+        from django.core.exceptions import ValidationError
+        previous = RiderDelivery.objects.get(pk=obj.pk)
+        if obj.status != previous.status:
+            raise ValidationError("Use dispatch actions or the rider portal for status updates.")
+        # Only notes and confirmation-lock controls can be edited here.
+        RiderDelivery.objects.filter(pk=obj.pk).update(notes=obj.notes, confirmation_attempts=obj.confirmation_attempts, confirmation_locked_until=obj.confirmation_locked_until)
+
+    def _resolve(self, request, queryset, target, note):
+        from .services import transition_delivery
+        from rest_framework.exceptions import APIException
+        count = 0
+        for delivery in queryset:
+            try:
+                transition_delivery(delivery, request.user, target, note, dispatch=True)
+                count += 1
+            except APIException as error:
+                self.message_user(request, f"{delivery.order.external_id}: {error.detail}", messages.ERROR)
+        self.message_user(request, f"{count} assignment(s) updated.", messages.SUCCESS)
 
     @admin.action(description="Resolve unsuccessful delivery: retry")
     def resolve_as_retry(self, request, queryset):
-        count = 0
-        for delivery in queryset.filter(status="unsuccessful"):
-            delivery.status = "accepted"
-            delivery.save(update_fields=("status", "updated_at"))
-            DeliveryEvent.objects.create(delivery=delivery, actor=request.user, status="accepted", note="Dispatch approved a retry.")
-            delivery.issues.filter(resolved_at__isnull=True).update(resolved_at=timezone.now())
-            count += 1
-        self.message_user(request, f"{count} delivery offer(s) returned to the rider for retry.", messages.SUCCESS)
+        self._resolve(request, queryset.filter(status="unsuccessful"), "accepted", "Dispatch approved a retry.")
 
     @admin.action(description="Resolve unsuccessful delivery: return to pharmacy")
     def resolve_as_return(self, request, queryset):
-        count = 0
-        for delivery in queryset.filter(status="unsuccessful"):
-            delivery.status = "returning"
-            delivery.save(update_fields=("status", "updated_at"))
-            DeliveryEvent.objects.create(delivery=delivery, actor=request.user, status="returning", note="Dispatch instructed rider to return package to the pharmacy.")
-            delivery.issues.filter(resolved_at__isnull=True).update(resolved_at=timezone.now())
-            count += 1
-        self.message_user(request, f"{count} rider(s) instructed to return the package.", messages.SUCCESS)
+        self._resolve(request, queryset.filter(status="unsuccessful"), "returning", "Dispatch instructed return to pharmacy.")
+
+    @admin.action(description="Cancel rider assignment before pickup")
+    def cancel_assignment(self, request, queryset):
+        self._resolve(request, queryset, "cancelled", "Dispatch cancelled the rider assignment.")
 
 
 @admin.register(DeliveryIssue)
