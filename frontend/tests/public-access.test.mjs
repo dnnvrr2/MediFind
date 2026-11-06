@@ -2,6 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { accountHome, pharmacyTabs, signedInDestination, needsCustomer, safeReturnTo } from '../src/domain/public-access.ts';
 
+test('rider applicants resume their application without gaining delivery access', () => {
+  assert.equal(safeReturnTo('/rider/apply'), '/rider/apply');
+  assert.equal(needsCustomer('/rider/apply'), true);
+  assert.equal(signedInDestination('/rider/apply', false, {}), '/rider/apply');
+  assert.equal(signedInDestination('/rider/deliveries', false, {}), '/home');
+  assert.equal(signedInDestination('/rider/deliveries', false, { isRider: true }), '/rider/deliveries');
+});
+
 test('authentication preserves pharmacy and quantity without permitting external redirects', () => {
   const target = '/availability/paracetamol-tablet?pharmacy=healthplus&qty=3';
   assert.equal(safeReturnTo(target), target);

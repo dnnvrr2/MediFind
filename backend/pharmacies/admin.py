@@ -1,6 +1,6 @@
 from django.contrib import admin
 from administration.admin import ReadOnlyAdmin
-from .models import PharmacyMember, Inventory, PrescriptionReview, PharmacyOrder, PharmacyAudit, PharmacyInvitation
+from .models import PharmacyMember, Inventory, PrescriptionReview, PharmacyOrder, PharmacyAudit, PharmacyInvitation, StockSettings, StockImport
 
 @admin.register(PharmacyMember)
 class MembershipAdmin(admin.ModelAdmin):
@@ -11,5 +11,5 @@ class MembershipAdmin(admin.ModelAdmin):
         super().save_model(request, obj, form, change)
         PharmacyAudit.objects.create(pharmacy=obj.pharmacy, actor=request.user, action="Membership verified or updated", target=str(obj.user_id), note=f"Role: {obj.role}; verified pharmacist: {obj.verified_pharmacist}; active: {obj.active}")
 
-for model in (Inventory, PrescriptionReview, PharmacyOrder, PharmacyAudit, PharmacyInvitation):
+for model in (Inventory, PrescriptionReview, PharmacyOrder, PharmacyAudit, PharmacyInvitation, StockSettings, StockImport):
     admin.site.register(model, ReadOnlyAdmin)

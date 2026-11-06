@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState, useRef } from 'react';
-import { ActivityIndicator, Pressable, Switch, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, Switch, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { PharmacyBranchDetailsFields, usePharmacyBranchDetails } from '../components/pharmacy-branch-details';
 import { PharmacyTeamInvitations } from '../components/pharmacy-team';
 import { PharmacyApplicationForm } from '../components/pharmacy-application-form';
-import { api, ApiError, type PharmacySession, type PharmacyApplication, type PharmacyMedicine, type PharmacyPrescription, type PharmacyOrderRecord, type PharmacyActivity } from '../api/client';
+import { api, ApiError, type PharmacySession, type PharmacyApplication, type PharmacyMedicine, type PharmacyPrescription, type PharmacyOrderRecord, type PharmacyActivity, type StockSettings } from '../api/client';
 import { useProfile } from '../state/profile';
 import { Back, Badge, Button, Card, DetailRow, Page, Text, TextLink, colors, s } from '../components/ui';
 import { CheckoutField } from '../components/checkout-field';
@@ -63,6 +63,7 @@ export function PharmacyPortal() {
   const [prescriptions, setPrescriptions] = useState<PharmacyPrescription[]>([]);
   const [orders, setOrders] = useState<PharmacyOrderRecord[]>([]);
   const [activity, setActivity] = useState<PharmacyActivity[]>([]);
+  const [stockSettings, setStockSettings] = useState<StockSettings | null>(null);
   const [team, setTeam] = useState<Awaited<ReturnType<typeof api.pharmacyTeam>>>([]);
   const [riders, setRiders] = useState<{ id: number; name: string; vehicle: string }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -89,12 +90,12 @@ export function PharmacyPortal() {
     setSession(current);
     await refreshProfile();
     if (current.application?.status === 'Approved') {
-      const [m, p, o, r, a, t] = await Promise.all([api.pharmacyMedicines(), api.pharmacyPrescriptions(), api.pharmacyOrders(), api.pharmacyRiders(), api.pharmacyActivity(), api.pharmacyTeam()]);
+      const [m, p, o, r, a, t, stock] = await Promise.all([api.pharmacyMedicines(), api.pharmacyPrescriptions(), api.pharmacyOrders(), api.pharmacyRiders(), api.pharmacyActivity(), api.pharmacyTeam(), api.pharmacyStockSettings()]);
       if (account.current !== email) return;
-      setMedicines(m); setPrescriptions(p); setOrders(o); setRiders(r); setActivity(a); setTeam(t);
+      setMedicines(m); setPrescriptions(p); setOrders(o); setRiders(r); setActivity(a); setTeam(t); setStockSettings(stock);
     }
   }, [refreshProfile]);
-  useEffect(() => { let live = true; setLoading(true); setSession(null); setMedicines([]); setOrders([]); setPrescriptions([]); setActivity([]); setError(''); refresh().catch(e => { if (live) setError(e.message); }).finally(() => { if (live) setLoading(false); }); const timer = setInterval(() => { if (live) refresh().catch(() => undefined); }, 20000); return () => { live = false; clearInterval(timer); }; }, [refresh, profile?.email]);
+  useEffect(() => { let live = true; setLoading(true); setSession(null); setMedicines([]); setOrders([]); setPrescriptions([]); setActivity([]); setStockSettings(null); setError(''); refresh().catch(e => { if (live) setError(e.message); }).finally(() => { if (live) setLoading(false); }); const timer = setInterval(() => { if (live) refresh().catch(() => undefined); }, 20000); return () => { live = false; clearInterval(timer); }; }, [refresh, profile?.email]);
   useEffect(() => { setQuery(''); setFilter('All'); setRequesting(false); setMedicineEdit(null); setInventoryEdit(null); setRxEdit(null); setOrderEditId(null); setConfirmAction(''); }, [tab]);
   async function act(action: () => Promise<unknown>, message: string, done?: () => void) {
     if (busy) return;
@@ -114,7 +115,7 @@ export function PharmacyPortal() {
   const lowStock = medicines.filter(m => m.inventory && m.inventory.available && m.inventory.stock - m.inventory.reserved <= m.inventory.low_stock);
   const visibleMedicines = medicines.filter(m => `${m.name} ${m.generic} ${m.strength}`.toLowerCase().includes(query.toLowerCase()) && (filter === 'All' || (filter === 'Low stock' ? lowStock.includes(m) : filter === 'Out of stock' ? outOfStock.includes(m) : m.status === filter)));
   const visibleOrders = orders.filter(o => `${o.data.id} ${o.data.recipient.name}`.toLowerCase().includes(query.toLowerCase()) && (filter === 'All' || (filter === 'Current' ? !finished(o.data.status) : finished(o.data.status))));
-  return <Page scrollKey={`pharmacy-${tab}`}><View style={s.between}><Text accessibilityRole="header" style={s.title}>{!approved && tab !== 'profile' ? 'Pharmacy application' : stateLabel(tab)}</Text><TextLink title="Refresh" icon="clock" onPress={() => void act(refresh, 'Records refreshed.')} /></View>{loading && <ActivityIndicator accessibilityLabel="Loading pharmacy records" color={colors.teal} />}{!!error && <Text accessibilityRole="alert" style={{ color: colors.danger }}>{error}</Text>}{!!notice && <Text accessibilityRole="alert" style={s.muted}>{notice}</Text>}
+  return <Page scrollKey={`pharmacy-${tab}`}><View style={s.between}><Text accessibilityRole="header" style={s.title}>{!approved && tab !== 'profile' ? 'Pharmacy application' : stateLabel(tab)}</Text><View style={s.row}>{approved && tab === 'inventory' && <TextLink title="Stock settings" icon="settings" onPress={() => router.push({ pathname: '/partner/stock-settings', params: { tab: 'inventory' } })} />}<TextLink title="Refresh" icon="refresh" onPress={() => void act(refresh, 'Records refreshed.')} /></View></View>{loading && <ActivityIndicator accessibilityLabel="Loading pharmacy records" color={colors.teal} />}{!!error && <Text accessibilityRole="alert" style={{ color: colors.danger }}>{error}</Text>}{!!notice && <Text accessibilityRole="alert" style={s.muted}>{notice}</Text>}
     {!loading && session && !approved && tab !== 'profile' && <>
       <Button title={profile?.isStaff ? 'Back to administration' : 'Back to home'} secondary icon="back" onPress={() => router.replace(accountHome(profile))} />
       {app && <Card><View style={s.between}><Text style={s.heading}>{app.name}</Text><Status value={app.status} /></View>{!!app.notes && <Text style={s.text}>{app.notes}</Text>}{app.status === 'Pending' && <Text style={s.muted}>Your application is with admin for review.</Text>}{app.history.map(event => <View key={event.id} style={{ gap: 4 }}><Text style={s.muted}>{stateLabel(event.status)} - {new Date(event.created_at).toLocaleDateString()}</Text>{!!event.notes && <Text style={s.caption}>{event.notes}</Text>}</View>)}</Card>}
@@ -128,8 +129,13 @@ export function PharmacyPortal() {
     </>}
     {!loading && approved && tab === 'inventory' && <>
       {requesting ? <MedicineForm initial={medicineEdit} busy={busy} close={() => setRequesting(false)} save={data => void act(() => api.pharmacyMedicineRequest(data), 'Medicine request submitted.', () => { setRequesting(false); setMedicineEdit(null); })} /> : inventoryEdit ? <InventoryForm key={inventoryEdit.id} item={inventoryEdit} busy={busy} close={() => setInventoryEdit(null)} save={(id, data) => void act(() => api.pharmacyInventory(id, data), 'Inventory saved.', () => setInventoryEdit(null))} /> : <>
-        <Button title="Request medicine" icon="plus" onPress={() => { setMedicineEdit(null); setRequesting(true); }} /><CheckoutField label="Search inventory" value={query} onChangeText={setQuery} /><View style={s.row}>{['All', 'Approved', 'Pending', 'Rejected', 'Low stock', 'Out of stock'].map(value => <Button key={value} title={value} secondary={filter !== value} onPress={() => setFilter(value)} />)}</View>
-        {visibleMedicines.map(m => <Card key={m.id}><View style={s.between}><Text style={[s.heading, { flexShrink: 1 }]}>{m.name}</Text><Status value={m.status} /></View><Text style={s.muted}>{m.strength} - {m.form}</Text><Badge text={m.prescription ? 'Prescription' : 'OTC'} neutral={!m.prescription} />{m.status === 'Approved' ? <><DetailRow label="Available / reserved" value={`${(m.inventory?.stock ?? 0) - (m.inventory?.reserved ?? 0)} / ${m.inventory?.reserved ?? 0}`} /><DetailRow label="Price" value={m.inventory ? money(Number(m.inventory.price)) : 'Not set'} /><Button title="Set stock and price" secondary onPress={() => setInventoryEdit(m)} /></> : <>{!!m.notes && <Text style={s.text}>{m.notes}</Text>}<Button title={m.status === 'Rejected' ? 'Update and resubmit' : 'Edit request'} secondary onPress={() => { setMedicineEdit(m); setRequesting(true); }} /></>}</Card>)}{!visibleMedicines.length && <Card><Text style={s.muted}>No medicines match this filter.</Text></Card>}
+        {stockSettings && <View style={s.between}><View style={{ gap: 4, flex: 1 }}><Text style={s.muted}>Stock updates: {stockSettings.method === 'csv' ? 'CSV imports' : 'Manual'}</Text>{stockSettings.method === 'csv' && <Text style={s.caption}>{stockSettings.last_import ? `Last imported: ${new Date(stockSettings.last_import.at).toLocaleString('en-PH')}` : 'No CSV imports yet'}</Text>}</View>{stockSettings.method === 'csv' && <Button title="Import CSV" icon="upload" disabled={busy} onPress={() => router.push({ pathname: '/partner/stock-settings', params: { tab: 'inventory', import: '1' } })} />}</View>}
+        <CheckoutField label="Search inventory" value={query} onChangeText={setQuery} />
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1, minWidth: 0 }} contentContainerStyle={{ gap: 12 }}>{['All', 'Approved', 'Pending', 'Rejected', 'Low stock', 'Out of stock'].map(value => <Button key={value} title={value} secondary={filter !== value} onPress={() => setFilter(value)} />)}</ScrollView>
+          <View style={{ flexShrink: 0 }}><Button title="Request medicine" icon="plus" disabled={busy} onPress={() => { setMedicineEdit(null); setRequesting(true); }} /></View>
+        </View>
+        {visibleMedicines.map(m => <Card key={m.id}><View style={s.between}><Text style={[s.heading, { flexShrink: 1 }]}>{m.name}</Text><Status value={m.status} /></View><Text style={s.muted}>{m.strength} - {m.form}</Text><Badge text={m.prescription ? 'Prescription' : 'OTC'} neutral={!m.prescription} />{m.status === 'Approved' ? <><DetailRow label="Available / reserved" value={`${(m.inventory?.stock ?? 0) - (m.inventory?.reserved ?? 0)} / ${m.inventory?.reserved ?? 0}`} /><DetailRow label="Price" value={m.inventory ? money(Number(m.inventory.price)) : 'Not set'} /><Button title="Set stock and price" secondary onPress={() => setInventoryEdit(m)} /></> : <>{!!m.notes && <Text style={s.text}>{m.notes}</Text>}<Button title={m.status === 'Rejected' ? 'Update and resubmit' : 'Edit request'} secondary onPress={() => { setMedicineEdit(m); setRequesting(true); }} /></>}</Card>)}{!visibleMedicines.length && <Card><Text style={s.muted}>{medicines.length ? 'No medicines match this filter.' : 'No medicines yet.'}</Text></Card>}
       </>}
     </>}
     {!loading && approved && tab === 'prescriptions' && <>

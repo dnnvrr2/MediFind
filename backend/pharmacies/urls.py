@@ -1,5 +1,5 @@
 from django.urls import path
-from . import views
+from . import views, stock_views
 urlpatterns = [
     path("invitations/", views.InvitationsView.as_view()),
     path("invitations/<uuid:pk>/accept/", views.InvitationAcceptView.as_view()),
@@ -10,6 +10,11 @@ urlpatterns = [
     path("documents/", views.UploadDocumentView.as_view()),
     path("open/", views.OpenView.as_view()),
     path("medicines/", views.MedicinesView.as_view()),
+    path("stock/settings/", stock_views.SettingsView.as_view()),
+    path("stock/template/", stock_views.TemplateView.as_view()),
+    path("stock/imports/", stock_views.UploadView.as_view()),
+    path("stock/imports/<uuid:pk>/preview/", stock_views.PreviewView.as_view()),
+    path("stock/imports/<uuid:pk>/confirm/", stock_views.ConfirmView.as_view()),
     path("inventory/<uuid:pk>/", views.InventoryView.as_view()),
     path("prescriptions/", views.PrescriptionListView.as_view()),
     path("prescriptions/<int:pk>/review/", views.PrescriptionDecisionView.as_view()),

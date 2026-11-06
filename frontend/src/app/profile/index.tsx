@@ -21,6 +21,7 @@ export default function Profile() {
       <Card><Icon name="profile" size={36} color={colors.teal} /><Text style={s.heading}>Sign in to your account</Text><Text style={s.muted}>Save orders and prescriptions to your account.</Text><Button title="Sign in" icon="profile" onPress={() => router.push('/account/sign-in')} /><Button title="Create account" secondary onPress={() => router.push('/account/register')} /></Card>
     </>}
     <Card><Destination icon="profile" title={profile?.pharmacyStatus === 'Approved' ? 'Pharmacy dashboard' : profile?.pharmacyStatus ? 'My pharmacy application' : 'Partner with MediFind'} detail={profile?.pharmacyStatus === 'Approved' ? 'Manage your branch and staff' : profile?.pharmacyStatus ? `Application status: ${profile.pharmacyStatus}` : 'Apply as a branch owner or accept a staff invitation'} onPress={() => router.push(profile?.pharmacyStatus ? '/partner' : '/partnership')} /></Card>
+    <Card><Destination icon="profile" title={profile?.isRider ? 'Rider dashboard' : 'Apply as rider'} detail={profile?.isRider ? 'Manage deliveries and availability' : 'Submit an application or check its review status'} onPress={() => router.push(profile?.isRider ? '/rider' : '/rider/apply')} /></Card>
     <ProfileLinks />
   </Page>;
 }

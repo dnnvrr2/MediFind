@@ -142,5 +142,17 @@
         "name":  "location",
         "file":  "icons/location.svg",
         "strokeWidth":  1.8
+    },
+    {
+        "viewBox":  "0 0 24 24",
+        "name":  "refresh",
+        "file":  "icons/refresh.svg",
+        "strokeWidth":  1.8
+    },
+    {
+        "viewBox":  "0 0 24 24",
+        "name":  "settings",
+        "file":  "icons/settings.svg",
+        "strokeWidth":  1.8
     }
 ]

@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, StyleSheet, TextInput, Switch, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, StyleSheet, TextInput, View, useWindowDimensions } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Icon, type IconName } from '../components/icon';
 import { Back, Badge, Button, Card, DetailRow, Page, Text, TextLink, colors, s } from '../components/ui';
 import { CheckoutField } from '../components/checkout-field';
 import { ProfileLinks } from '../components/profile-links';
+import { AdminRiders } from '../components/admin-riders';
 import { useProfile } from '../state/profile';
 import { reviewRecord, reviewCounts, type MedicineReviewStatus } from '../domain/admin';
 import { api, ApiError, type AdminPharmacy, type AdminMedicine, type AdminEvent, type AdminDocument } from '../api/client';
@@ -12,7 +13,7 @@ import { api, ApiError, type AdminPharmacy, type AdminMedicine, type AdminEvent,
 type Status = AdminPharmacy['status'];
 type Pharmacy = AdminPharmacy & { date: string };
 type Medicine = AdminMedicine & { date: string };
-type Tab = 'dashboard' | 'pharmacies' | 'catalog' | 'profile';
+type Tab = 'dashboard' | 'pharmacies' | 'catalog' | 'riders' | 'profile';
 const displayDate = (value: string) => new Date(value).toLocaleDateString('en-PH', { day: 'numeric', month: 'short', year: 'numeric' });
 const pharmacyRow = (row: AdminPharmacy): Pharmacy => ({ ...row, date: displayDate(row.created_at) });
 const medicineRow = (row: AdminMedicine): Medicine => ({ ...row, date: displayDate(row.created_at) });
@@ -59,19 +60,11 @@ export function AdminWorkspace() {
   const [notes, setNotes] = useState('');
   const [latitude, setLatitude] = useState('');
   const [longitude, setLongitude] = useState('');
-  const [adding, setAdding] = useState(false);
-  const [newName, setNewName] = useState('');
-  const [newGeneric, setNewGeneric] = useState('');
-  const [newStrength, setNewStrength] = useState('');
-  const [newForm, setNewForm] = useState('');
-  const [newUnit, setNewUnit] = useState('unit');
-  const [newRx, setNewRx] = useState(true);
-  const [newPharmacy, setNewPharmacy] = useState('');
   const wide = useWindowDimensions().width >= 760;
   const { tab: routeTab } = useLocalSearchParams<{ tab?: string }>();
   useEffect(() => {
-    const next: Tab = routeTab === 'pharmacies' || routeTab === 'catalog' || routeTab === 'profile' ? routeTab : 'dashboard';
-    setTab(next); setDetailId(null); setMedicineId(null); setSearch(''); setAdding(false); setNotice(''); setNotes('');
+    const next: Tab = routeTab === 'pharmacies' || routeTab === 'catalog' || routeTab === 'riders' || routeTab === 'profile' ? routeTab : 'dashboard';
+    setTab(next); setDetailId(null); setMedicineId(null); setSearch(''); setNotice(''); setNotes('');
   }, [routeTab]);
   const detail = pharmacies.find(p => p.id === detailId);
   const medicine = medicines.find(m => m.id === medicineId);
@@ -80,7 +73,7 @@ export function AdminWorkspace() {
   const filteredMedicines = useMemo(() => medicines.filter(m => m.status === catalogFilter && `${m.name} ${m.pharmacy}`.toLowerCase().includes(search.toLowerCase())), [medicines, search, catalogFilter]);
   const pharmacyCounts = reviewCounts(pharmacies);
   const medicineCounts = reviewCounts(medicines);
-  function move(next: Tab) { setNotice(''); setNotes(''); setTab(next); setDetailId(null); setMedicineId(null); setSearch(''); setAdding(false); router.setParams({ tab: next }); }
+  function move(next: Tab) { setNotice(''); setNotes(''); setTab(next); setDetailId(null); setMedicineId(null); setSearch(''); router.setParams({ tab: next }); }
   function selectPharmacy(p: Pharmacy) { setNotice(''); setDetailId(p.id); setNotes(p.notes || ''); setLatitude(p.point ? String(p.point.lat) : ''); setLongitude(p.point ? String(p.point.lon) : ''); }
   useEffect(() => {
     let live = true;
@@ -137,22 +130,15 @@ export function AdminWorkspace() {
       } });
     } catch (error) { failure(error); }
   }
-  async function addMedicine() {
-    if (!newName.trim() || !newGeneric.trim() || !newStrength.trim() || !newForm.trim() || !newUnit.trim() || !newPharmacy) { setNotice('Enter the medicine name, strength/form, and select an approved pharmacy.'); return; }
-    setBusy(true);
-    try {
-      const created = medicineRow(await api.adminCreateMedicine({ name: newName.trim(), description: `${newStrength.trim()} - ${newForm.trim()}`, generic: newGeneric.trim(), strength: newStrength.trim(), form: newForm.trim(), unit: newUnit.trim(), prescription: newRx, pharmacy_id: newPharmacy }));
-      setMedicines(prev => [created, ...prev]); setNewName(''); setNewGeneric(''); setNewStrength(''); setNewForm(''); setNewUnit('unit'); setNewRx(true); setNewPharmacy(''); setAdding(false); setCatalogFilter('Pending'); setNotice('Medicine request saved for review.');
-    } catch (error) { failure(error); } finally { setBusy(false); }
-  }
   const back = () => { setDetailId(null); setMedicineId(null); setNotice(''); setNotes(''); };
-  const title = detail ? 'Application details' : medicine ? 'Medicine request' : tab === 'dashboard' ? 'Dashboard' : tab === 'pharmacies' ? 'Pharmacy applications' : tab === 'catalog' ? 'Medicine catalog' : 'Admin profile';
+  const title = detail ? 'Application details' : medicine ? 'Medicine request' : tab === 'dashboard' ? 'Dashboard' : tab === 'pharmacies' ? 'Pharmacy applications' : tab === 'catalog' ? 'Medicine submissions' : 'Admin profile';
   const refresh = () => { if (!busy) setRefreshKey(value => value + 1); };
+  if (tab === 'riders') return <Page><Text accessibilityRole="header" style={s.title}>Rider applications</Text><AdminRiders refreshKey={refreshKey} /></Page>;
   return <>
     <Page scrollKey={`admin-${detail?.id ?? medicine?.id ?? tab}`}>
       <View style={[s.between, { alignItems: 'flex-start' }]}>
         <View style={{ flex: 1, minWidth: 200, gap: 8 }}>{detail || medicine ? <Back title={title} onBack={back} /> : <><Text accessibilityRole="header" style={s.title}>{title}</Text></>}</View>
-        <TextLink title={loading ? 'Refreshing...' : 'Refresh'} icon="clock" onPress={() => { if (!loading) refresh(); }} />
+        <TextLink title={loading ? 'Refreshing...' : 'Refresh'} icon="refresh" onPress={() => { if (!loading) refresh(); }} />
       </View>
       {!!notice && <Card><View style={a.row}><Icon name="alert" size={22} /><Text accessibilityRole="alert" style={[s.text, { flex: 1 }]}>{notice}</Text></View></Card>}
       {loading && <View style={a.row}><ActivityIndicator accessibilityLabel="Loading administration records" color={colors.teal} /><Text style={s.muted}>Loading records...</Text></View>}
@@ -185,10 +171,9 @@ export function AdminWorkspace() {
           <History events={detail.history} />
         </>}
         {tab === 'catalog' && !medicine && <>
-          <View style={{ gap: 16 }}><RecordSearch value={search} onChange={setSearch} placeholder="Search medicine or pharmacy" /><Filters values={['Pending', 'Approved', 'Rejected'] as const} selected={catalogFilter} onChange={setCatalogFilter} /><View style={s.between}><Text style={s.muted}>{filteredMedicines.length} medicines</Text><Button title={adding ? 'Close form' : 'Add medicine'} secondary icon={adding ? 'close' : 'plus'} disabled={busy} onPress={() => setAdding(value => !value)} /></View></View>
-          {adding && <Card><Text style={s.heading}>Add medicine request</Text><CheckoutField label="Medicine name" value={newName} onChangeText={setNewName} maxLength={150} editable={!busy} /><CheckoutField label="Generic name" value={newGeneric} onChangeText={setNewGeneric} maxLength={150} editable={!busy} /><CheckoutField label="Strength" value={newStrength} onChangeText={setNewStrength} maxLength={100} editable={!busy} /><CheckoutField label="Form" value={newForm} onChangeText={setNewForm} maxLength={80} editable={!busy} /><CheckoutField label="Unit" value={newUnit} onChangeText={setNewUnit} maxLength={40} editable={!busy} /><View style={s.between}><Text style={s.text}>Prescription required</Text><Switch accessibilityLabel="Prescription required" value={newRx} onValueChange={setNewRx} disabled={busy} /></View><Text style={s.muted}>Select an approved pharmacy</Text>{pharmacies.filter(p => p.status === 'Approved').map(p => <Pressable key={p.id} accessibilityRole="radio" accessibilityState={{ checked: newPharmacy === p.id, disabled: busy }} disabled={busy} onPress={() => setNewPharmacy(p.id)} style={[s.card, { padding: 16 }, newPharmacy === p.id && { borderColor: colors.teal, backgroundColor: colors.pale }]}><View style={a.row}><Icon name="pharmacy" size={22} /><View style={a.stack}><Text style={[s.text, { fontWeight: '600' }]}>{p.name}</Text><Text style={s.muted}>{p.address}</Text></View><Text style={[s.link, { flexShrink: 0 }]}>{newPharmacy === p.id ? 'Selected' : 'Select'}</Text></View></Pressable>)}{!pharmacies.some(p => p.status === 'Approved') && <Text style={s.muted}>Approve a pharmacy application before creating medicine requests.</Text>}<Button title={busy ? 'Saving...' : 'Save medicine request'} icon="plus" disabled={busy || !pharmacies.some(p => p.status === 'Approved')} onPress={() => void addMedicine()} /></Card>}
+          <View style={{ gap: 16 }}><RecordSearch value={search} onChange={setSearch} placeholder="Search medicine or pharmacy" /><Filters values={['Pending', 'Approved', 'Rejected'] as const} selected={catalogFilter} onChange={setCatalogFilter} /><Text style={s.muted}>{filteredMedicines.length} submissions</Text></View>
           {filteredMedicines.map(m => <Card key={m.id}><View style={[a.row, { alignItems: 'flex-start' }]}><IconTile name="medicine" /><View style={a.stack}><View style={s.between}><Text style={[s.heading, { flexShrink: 1 }]}>{m.name}</Text><StatusBadge status={m.status} /></View><Text style={s.text}>{m.description}</Text><Text style={s.muted}>{m.pharmacy}</Text><Text style={s.caption}>Submitted {m.date}</Text></View></View><Button title={m.status === 'Pending' ? 'Review request' : 'View medicine'} secondary icon="arrow-right" onPress={() => { setMedicineId(m.id); setNotes(m.notes || ''); setNotice(''); }} /></Card>)}
-          {!filteredMedicines.length && <Card><IconTile name="medicine" /><Text style={s.heading}>No medicines found</Text><Text style={s.muted}>{search ? 'Try another medicine or pharmacy name.' : 'Try another status or add a medicine.'}</Text></Card>}
+          {!filteredMedicines.length && <Card><IconTile name="medicine" /><Text style={s.heading}>No medicine submissions</Text><Text style={s.muted}>{search ? 'Try another medicine or pharmacy name.' : 'Pharmacy submissions will appear here for review.'}</Text></Card>}
         </>}
         {medicine && <>
           <Card><View style={s.between}><Text style={[s.heading, { flexShrink: 1 }]}>{medicine.name}</Text><StatusBadge status={medicine.status} /></View>{[['Strength / form', medicine.description], ['Generic', medicine.generic || 'Not supplied'], ['Classification', medicine.prescription === false ? 'OTC' : 'Prescription required'], ['Unit', medicine.unit || 'unit'], ['Pharmacy', medicine.pharmacy], ['Submitted', medicine.date], ['Request ID', medicine.id]].map(([label, value]) => <DetailRow key={label} label={label} value={value} />)}<Text style={s.muted}>Verify product and regulatory information before approval. Catalog approval does not set stock or prices.</Text></Card>
@@ -196,8 +181,8 @@ export function AdminWorkspace() {
           <History events={medicine.history} />
         </>}
         {tab === 'profile' && <>
-          <Card><View style={a.row}><View style={{ width: 58, height: 58, borderRadius: 29, backgroundColor: colors.pale, alignItems: 'center', justifyContent: 'center' }}><Icon name="profile" size={30} /></View><View style={a.stack}><Text style={s.heading}>{profile?.fullName || 'Administrator'}</Text><Text style={s.muted}>{profile?.email}</Text></View></View><Badge text="Staff account" /></Card>
-          <Card><Text style={s.heading}>Account</Text><Button title="Go to customer home" secondary icon="home" onPress={() => router.replace('/home')} /><Button title="Go to guest home" secondary onPress={() => router.replace('/')} /><Button title="Sign out" secondary disabled={busy} onPress={async () => { await signOut(); router.replace('/'); }} /></Card><ProfileLinks />
+          <Card><View style={a.row}><View style={{ width: 58, height: 58, borderRadius: 29, backgroundColor: colors.pale, alignItems: 'center', justifyContent: 'center' }}><Icon name="profile" size={30} /></View><View style={a.stack}><Text style={s.heading}>{profile?.fullName || 'Administrator'}</Text><Text style={s.muted}>{profile?.email}</Text></View></View><Badge text="Admin" /></Card>
+          <Card><Text style={s.heading}>Account</Text><Button title="Sign out" secondary disabled={busy} onPress={async () => { await signOut(); router.replace('/'); }} /></Card><ProfileLinks />
         </>}
       </>}
     </Page>

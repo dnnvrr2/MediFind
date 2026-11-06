@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { Slot, router, usePathname, useGlobalSearchParams } from 'expo-router';
-import { View, Pressable, useWindowDimensions, ActivityIndicator, Text as NativeText } from 'react-native';
+import { View, Pressable, Platform, useWindowDimensions, ActivityIndicator, Text as NativeText } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useFonts } from 'expo-font';
@@ -30,6 +30,8 @@ function Shell() {
   const riderMode = portal === 'rider';
   const partnerMode = portal === 'partner';
   const guestMode = !profile;
+  const desktopHeader = Platform.OS === 'web' && wide;
+  const portalLabel = adminMode ? 'Admin portal' : partnerMode ? 'Pharmacy portal' : riderMode ? 'Rider portal' : null;
   const restricted = !profile && pathname !== '/rider/login' && needsCustomer(pathname);
   useEffect(() => {
     if (profileReady && restricted) router.replace({ pathname: '/account/sign-in', params: { returnTo: pathname } });
@@ -38,9 +40,9 @@ function Shell() {
   const customerDestinations: { path: '/home' | '/prescriptions' | '/cart' | '/orders' | '/profile'; label: string; icon: IconName }[] = [
     { path: '/home', label: 'Home', icon: 'home' }, { path: '/prescriptions', label: 'Prescriptions', icon: 'prescription' }, { path: '/cart', label: count ? `Cart (${count})` : 'Cart', icon: 'cart' }, { path: '/orders', label: 'Orders', icon: 'orders' }, { path: '/profile', label: 'Profile', icon: 'profile' },
   ];
-  const riderDestinations: { path: '/rider' | '/rider/deliveries' | '/rider/history' | '/rider/profile'; label: string; icon: IconName }[] = [
+  const riderDestinations: { path: '/rider' | '/rider/apply' | '/rider/deliveries' | '/rider/history' | '/rider/profile' | '/profile'; label: string; icon: IconName }[] = profile?.isRider ? [
     { path: '/rider', label: 'Today', icon: 'home' }, { path: '/rider/deliveries', label: 'Deliveries', icon: 'orders' }, { path: '/rider/history', label: 'History', icon: 'orders' }, { path: '/rider/profile', label: 'Profile', icon: 'profile' },
-  ];
+  ] : [{ path: '/rider/apply', label: 'Application', icon: 'home' }, { path: '/profile', label: 'Profile', icon: 'profile' }];
   const guestDestinations: { path: '/' | '/search' | '/pharmacies' | '/profile'; label: string; icon: IconName }[] = [
     { path: '/', label: 'Home', icon: 'home' }, { path: '/search', label: 'Search', icon: 'search' },
     { path: '/pharmacies', label: 'Pharmacies', icon: 'pharmacy' }, { path: '/profile', label: 'Login', icon: 'profile' },
@@ -50,6 +52,7 @@ function Shell() {
     { key: 'dashboard', label: 'Dashboard', icon: 'home' },
     { key: 'pharmacies', label: 'Pharmacies', icon: 'pharmacy' },
     { key: 'catalog', label: 'Catalog', icon: 'medicine' },
+    { key: 'riders', label: 'Riders', icon: 'profile' },
     { key: 'profile', label: 'Profile', icon: 'profile' },
   ];
   const partnerDestinations = pharmacyTabs(profile?.pharmacyStatus === 'Approved');
@@ -65,9 +68,10 @@ function Shell() {
   return <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['top', 'bottom']}>
     <StatusBar style="dark" />
     <View style={{ backgroundColor: colors.white, borderBottomWidth: 1, borderColor: colors.line }}>
-      <View style={{ width: '100%', maxWidth: 1100, alignSelf: 'center', paddingHorizontal: 20, paddingVertical: wide ? 14 : 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-        <Pressable accessibilityRole="link" accessibilityLabel="MediFind home" onPress={() => router.navigate(accountHome(profile))} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44 }}>
+      <View style={{ width: '100%', maxWidth: 1100, alignSelf: 'center', paddingHorizontal: 20, paddingVertical: wide ? 14 : 12, flexDirection: 'row', flexWrap: desktopHeader ? 'wrap' : 'nowrap', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+        <Pressable accessibilityRole="link" accessibilityLabel={desktopHeader && portalLabel ? `MediFind ${portalLabel} home` : 'MediFind home'} onPress={() => router.navigate(accountHome(profile))} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44 }}>
           <Icon name="medicine" size={28} /><Text style={{ fontSize: 21, lineHeight: 28, fontWeight: '700', letterSpacing: -0.6 }}>MediFind</Text>
+          {desktopHeader && portalLabel && <View style={{ backgroundColor: colors.pale, borderRadius: 6, paddingHorizontal: 9, paddingVertical: 5 }}><Text style={[s.caption, { color: colors.teal }]}>{portalLabel}</Text></View>}
         </Pressable>{wide ? nav : <Text style={s.caption}>{partnerMode ? 'Pharmacy portal' : adminMode ? 'Staff portal' : riderMode ? 'Rider portal' : guestMode ? 'Browse medicines' : 'Customer preview'}</Text>}
       </View>
     </View>

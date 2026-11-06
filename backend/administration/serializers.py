@@ -49,17 +49,6 @@ class MedicineSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
-class CreateMedicineSerializer(serializers.Serializer):
-    name = serializers.CharField(max_length=150)
-    description = serializers.CharField(max_length=150, required=False)
-    generic = serializers.CharField(max_length=150)
-    strength = serializers.CharField(max_length=100)
-    form = serializers.CharField(max_length=80)
-    unit = serializers.CharField(max_length=40)
-    prescription = serializers.BooleanField(default=True)
-    pharmacy_id = serializers.UUIDField()
-
-
 class DecisionSerializer(serializers.Serializer):
     status = serializers.ChoiceField(choices=("Approved", "Rejected", "Needs Info"))
     notes = serializers.CharField(max_length=1000, allow_blank=True, default="")

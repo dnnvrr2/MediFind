@@ -16,6 +16,16 @@ Invitation acceptance never enables pharmacist verification. Authorized administ
 
 ## Backend
 
+### Medicine ownership and inventory
+
+Pharmacy members submit medicine details through their branch portal. Administrators review, approve, or reject those submissions; the administration medicine collection supports GET only and does not create medicines. Django admin medicine records are also read-only.
+
+The branch enters physical stock, price, and availability for approved medicines. Customer availability is physical stock minus reserved stock. Acceptance reserves an order's quantities; customer collection or confirmed delivery consumes the reservation and deducts physical stock exactly once. Rejected or cancelled orders do not consume physical stock. Delivery issues and retries keep the reservation. A completed return consumes the allocation; returned products require inspection and a manual inventory adjustment before becoming available again.
+
+Restocking, expiry, losses, and sales outside MediFind require branch inventory updates. No pharmacy point-of-sale or supplier system is connected. Pharmacy and customer catalog screens refresh from the API every 20 seconds.
+
+Stock settings supports Manual updates and CSV imports, with owner-configured matching and a protected preview/confirmation flow. See [STOCK_UPDATES.md](STOCK_UPDATES.md) for instructions, import limits, and API details.
+
 Run `python manage.py migrate` to install the pharmacy invitation table. New endpoints:
 
 - `GET /api/pharmacy/invitations/`: current account's valid incoming invitations.

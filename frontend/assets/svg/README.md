@@ -1,6 +1,6 @@
 # Custom SVG assets
 
-24 original interface icons plus one empty-cart illustration, created for the Online Medicine Search and Ordering System. These are code-authored vectors, not traced stock graphics.
+26 original interface icons plus one empty-cart illustration, created for the Online Medicine Search and Ordering System. These are code-authored vectors, not traced stock graphics.
 
 ## Design
 

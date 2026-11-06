@@ -16,11 +16,19 @@ export type PharmacyPrescription = { id: number; reference: string; customer: st
 export type PharmacyOrderRecord = { id: number; version: number; reservation: string; data: import('../domain/orders').DemoOrder; rider: null | { id: string; name: string; status: string } };
 export type PharmacyActivity = { id: number; action: string; target: string; note: string; actor: string; created_at: string };
 export type PublicCatalog = { medicines: import('../data/catalog').Medicine[]; pharmacies: import('../data/catalog').Pharmacy[]; offers: import('../data/catalog').Offer[] };
+export type StockImportHistory = { id: string; filename: string; rows: number; at: string; actor: string };
+export type StockSettings = { method: 'manual' | 'csv'; column_mapping: Record<string, string>; version: number; can_configure: boolean; last_import: StockImportHistory | null; history: StockImportHistory[] };
+export type StockCsvUpload = { id: string; filename: string; headers: string[]; sample: Record<string, string>[]; row_count: number; expires_at: string };
+export type StockCsvRow = { row: number; medicine: string; error?: string; old_stock?: number | null; stock?: number; reserved?: number; available_stock?: number; old_price?: string | null; price?: string; low_stock?: number; available?: boolean };
+export type StockCsvPreview = { id: string; filename: string; version: number; row_count: number; valid_count: number; error_count: number; rows: StockCsvRow[]; expires_at: string };
 export type UploadFile = { uri: string; name: string; mimeType: string };
 async function appendUpload(body: FormData, key: string, file: UploadFile) {
   if (Platform.OS === 'web') body.append(key, await (await fetch(file.uri)).blob(), file.name);
   else body.append(key, { uri: file.uri, name: file.name, type: file.mimeType } as unknown as Blob);
 }
+export type RiderApplicationInput = { full_name: string; phone: string; vehicle: string; plate_number: string; service_area: string };
+export type RiderApplication = RiderApplicationInput & { id: number; email: string; status: 'Pending' | 'Approved' | 'Rejected'; notes: string; version: number; submitted_at: string; reviewed_at: string | null; history: { id: number; status: string; notes: string; created_at: string }[] };
+export type RiderApplicationSession = { application: RiderApplication | null; approved: boolean };
 export type Rider = { id: number; email: string; full_name: string; phone: string; vehicle: string; available: boolean };
 export type RiderDelivery = {
   id: string; order_reference: string; status: string; status_label: string; customer_name: string; customer_phone: string;
@@ -54,14 +62,15 @@ async function readRefresh() {
 }
 
 function developmentApiUrl() {
+  const port = process.env.EXPO_PUBLIC_API_PORT || '8000';
   // A physical phone must use the Metro computer's LAN address, not loopback.
   if (__DEV__ && Platform.OS !== 'web' && Constants.expoConfig?.hostUri) {
     try {
       const host = new URL(`http://${Constants.expoConfig.hostUri}`).hostname;
-      if (host && host !== 'localhost' && host !== '127.0.0.1') return `http://${host}:8000`;
+      if (host && host !== 'localhost' && host !== '127.0.0.1') return `http://${host}:${port}`;
     } catch { /* Fall back when no usable development host is available. */ }
   }
-  return 'http://127.0.0.1:8000';
+  return `http://127.0.0.1:${port}`;
 }
 const apiBase = (process.env.EXPO_PUBLIC_API_URL || developmentApiUrl()).replace(/\/$/, '');
 export class ApiError extends Error { constructor(message: string, readonly status = 0) { super(message); } }
@@ -167,6 +176,12 @@ export const api = {
   pharmacyMedicines: () => request<PharmacyMedicine[]>('/api/pharmacy/medicines/'),
   pharmacyMedicineRequest: (payload: Record<string, unknown>) => request<AdminMedicine>('/api/pharmacy/medicines/', { method: 'POST', body: JSON.stringify(payload) }),
   pharmacyInventory: (id: string, payload: Record<string, unknown>) => request(`/api/pharmacy/inventory/${encodeURIComponent(id)}/`, { method: 'POST', body: JSON.stringify(payload) }),
+  pharmacyStockSettings: () => request<StockSettings>('/api/pharmacy/stock/settings/'),
+  pharmacySaveStockSettings: (payload: { method: StockSettings['method']; version: number; column_mapping?: Record<string, string> }) => request<StockSettings>('/api/pharmacy/stock/settings/', { method: 'PATCH', body: JSON.stringify(payload) }),
+  pharmacyStockTemplate: () => request<{ filename: string; content: string; count: number }>('/api/pharmacy/stock/template/'),
+  pharmacyUploadStockCsv: async (file: UploadFile) => { const body = new FormData(); await appendUpload(body, 'file', file); return request<StockCsvUpload>('/api/pharmacy/stock/imports/', { method: 'POST', body }); },
+  pharmacyPreviewStockCsv: (id: string, mapping: Record<string, string>) => request<StockCsvPreview>(`/api/pharmacy/stock/imports/${encodeURIComponent(id)}/preview/`, { method: 'POST', body: JSON.stringify({ mapping }) }),
+  pharmacyConfirmStockCsv: (id: string, version: number) => request<{ imported: number; already_applied: boolean; settings: StockSettings }>(`/api/pharmacy/stock/imports/${encodeURIComponent(id)}/confirm/`, { method: 'POST', body: JSON.stringify({ version }) }),
   pharmacyPrescriptions: () => request<PharmacyPrescription[]>('/api/pharmacy/prescriptions/'),
   pharmacyPrescriptionReview: (id: number, payload: Record<string, unknown>) => request(`/api/pharmacy/prescriptions/${id}/review/`, { method: 'POST', body: JSON.stringify(payload) }),
   pharmacyPrescriptionFile: (id: number) => request<Blob>(`/api/pharmacy/prescriptions/${id}/file/`, {}, true, 'blob'),
@@ -182,11 +197,14 @@ export const api = {
   adminReviewPharmacy: (id: string, payload: { status: AdminPharmacy['status']; notes: string; version: number }) => request<AdminPharmacy>(`/api/administration/pharmacies/${encodeURIComponent(id)}/review/`, { method: 'POST', body: JSON.stringify(payload) }),
   adminSetPharmacyLocation: (id: string, payload: { latitude: number; longitude: number }) => request<AdminPharmacy>(`/api/administration/pharmacies/${encodeURIComponent(id)}/location/`, { method: 'POST', body: JSON.stringify(payload) }),
   adminReviewMedicine: (id: string, payload: { status: AdminMedicine['status']; notes: string; version: number }) => request<AdminMedicine>(`/api/administration/medicines/${encodeURIComponent(id)}/review/`, { method: 'POST', body: JSON.stringify(payload) }),
-  adminCreateMedicine: (payload: { name: string; description: string; generic: string; strength: string; form: string; unit: string; prescription: boolean; pharmacy_id: string }) => request<AdminMedicine>('/api/administration/medicines/', { method: 'POST', body: JSON.stringify(payload) }),
   adminDocument: (id: number) => request<Blob>(`/api/administration/documents/${id}/`, {}, true, 'blob'),
   register: (payload: { email: string; password: string; full_name: string; phone: string }) => request<ApiSession>('/api/auth/register/', { method: 'POST', body: JSON.stringify(payload) }, false),
   login: (payload: { email: string; password: string }) => request<ApiSession>('/api/auth/token/', { method: 'POST', body: JSON.stringify(payload) }, false),
   riderMe: () => request<Rider>('/api/rider/me/'),
+  riderApplication: () => request<RiderApplicationSession>('/api/rider/application/'),
+  riderApply: (payload: RiderApplicationInput) => request<RiderApplication>('/api/rider/application/', { method: 'POST', body: JSON.stringify(payload) }),
+  adminRiderApplications: () => request<RiderApplication[]>('/api/rider/applications/'),
+  adminReviewRider: (id: number, payload: { status: 'Approved' | 'Rejected'; notes: string; version: number }) => request<RiderApplication>(`/api/rider/applications/${id}/review/`, { method: 'POST', body: JSON.stringify(payload) }),
   riderSetAvailability: (available: boolean) => request<Rider>('/api/rider/me/', { method: 'PATCH', body: JSON.stringify({ available }) }),
   riderDeliveries: (bucket = 'all') => request<RiderDelivery[]>(`/api/rider/deliveries/${bucket === 'all' ? '' : `?bucket=${bucket}`}`),
   riderAction: async (id: string, payload: Record<string, string | boolean>, proof?: { uri: string; name: string; mimeType: string }) => {

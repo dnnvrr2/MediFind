@@ -1,4 +1,4 @@
-from django.db import IntegrityError, transaction
+from django.db import transaction
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -9,7 +9,7 @@ from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from .models import MedicineRequest, PharmacyApplication, PharmacyDocument, ReviewEvent
-from .serializers import CreateMedicineSerializer, DecisionSerializer, MedicineSerializer, PharmacySerializer
+from .serializers import DecisionSerializer, MedicineSerializer, PharmacySerializer
 
 
 class Conflict(APIException):
@@ -32,21 +32,6 @@ class MedicinesView(StaffView):
         records = MedicineRequest.objects.select_related("pharmacy").prefetch_related("history")
         return Response(MedicineSerializer(records, many=True).data)
 
-    def post(self, request):
-        payload = CreateMedicineSerializer(data=request.data)
-        payload.is_valid(raise_exception=True)
-        data = payload.validated_data
-        data["description"] = (data["strength"] + " - " + data["form"])[:150]
-        try:
-            with transaction.atomic():
-                pharmacy = get_object_or_404(PharmacyApplication.objects.select_for_update(), pk=data.pop("pharmacy_id"))
-                if pharmacy.status != "Approved":
-                    raise ValidationError("Choose an approved pharmacy before adding a medicine request.")
-                medicine = MedicineRequest.objects.create(pharmacy=pharmacy, **data)
-                ReviewEvent.objects.create(medicine=medicine, actor=request.user, actor_email=request.user.email, status="Pending", notes="Medicine request created.")
-        except IntegrityError:
-            raise Conflict("This medicine, strength/form, and pharmacy already exist.")
-        return Response(MedicineSerializer(medicine).data, status=201)
 
 
 class ReviewView(StaffView):

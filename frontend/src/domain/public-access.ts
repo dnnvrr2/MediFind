@@ -1,7 +1,8 @@
 // Only internal destinations may be resumed; admin performs its own staff check.
 export function safeReturnTo(value: unknown): string {
   if (typeof value !== 'string' || value.includes('\\') || /[\r\n]/.test(value)) return '/home';
-  return /^\/(availability\/[^/?#]+|prescriptions(?:\/[^?#]*)?|home|cart|checkout|orders(?:\/[^?#]*)?|profile|admin|partner|partnership|rider(?:\/(?:deliveries|history|profile|delivery\/[^/?#]+|issue\/[^/?#]+))?)(?:\?[^#]*)?$/.test(value) ? value : '/home';
+  if (value === '/rider/apply') return value;
+  return /^\/(availability\/[^/?#]+|prescriptions(?:\/[^?#]*)?|home|cart|checkout|orders(?:\/[^?#]*)?|profile|admin|partner(?:\/(?:stock-settings|contact-admin))?|partnership|rider(?:\/(?:deliveries|history|profile|delivery\/[^/?#]+|issue\/[^/?#]+))?)(?:\?[^#]*)?$/.test(value) ? value : '/home';
 }
 
 export function needsCustomer(path: string): boolean {
@@ -28,6 +29,7 @@ export function pharmacyTabs(approved: boolean): { key: string; label: string; i
 // Staff permissions are still checked by the admin route and API.
 export function signedInDestination(returnTo: unknown, isStaff: boolean, profile?: Parameters<typeof accountHome>[0]): string {
   const destination = safeReturnTo(returnTo);
+  if (destination === '/rider/apply') return destination;
   if (/^\/rider(?:[/?#]|$)/.test(destination) && !profile?.isRider) return accountHome(profile ?? { isStaff });
   if (destination === '/home') return accountHome(profile ?? { isStaff });
   return !isStaff && /^\/admin(?:[/?#]|$)/.test(destination) ? accountHome(profile ?? { isStaff }) : destination;

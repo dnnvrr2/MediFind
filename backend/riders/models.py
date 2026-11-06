@@ -5,6 +5,7 @@ import uuid
 from django.conf import settings
 from django.core.validators import MinValueValidator
 from django.db import models
+from django.utils import timezone
 
 
 def proof_upload_path(instance, filename):
@@ -15,6 +16,32 @@ def proof_upload_path(instance, filename):
 def issue_upload_path(instance, filename):
     ext = filename.rsplit(".", 1)[-1].lower()[:8]
     return f"delivery-issues/{instance.delivery_id}/{uuid.uuid4().hex}.{ext}"
+
+
+class RiderApplication(models.Model):
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='rider_application')
+    full_name = models.CharField(max_length=160)
+    phone = models.CharField(max_length=16)
+    vehicle = models.CharField(max_length=80)
+    plate_number = models.CharField(max_length=30, blank=True)
+    service_area = models.CharField(max_length=200)
+    status = models.CharField(max_length=16, choices=[('Pending', 'Pending'), ('Approved', 'Approved'), ('Rejected', 'Rejected')], default='Pending')
+    notes = models.TextField(blank=True, max_length=1000)
+    version = models.PositiveIntegerField(default=1)
+    submitted_at = models.DateTimeField(default=timezone.now)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    reviewed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True, related_name='reviewed_rider_applications')
+
+
+class RiderApplicationEvent(models.Model):
+    application = models.ForeignKey(RiderApplication, on_delete=models.CASCADE, related_name='events')
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    status = models.CharField(max_length=16)
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ('created_at', 'pk')
 
 
 class RiderProfile(models.Model):

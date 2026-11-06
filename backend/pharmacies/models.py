@@ -28,6 +28,36 @@ class Inventory(models.Model):
         constraints = [models.CheckConstraint(condition=models.Q(stock__gte=models.F("reserved")), name="inventory_covers_reservations"), models.CheckConstraint(condition=models.Q(price__gte=0), name="inventory_nonnegative_price")]
 
 
+class StockSettings(models.Model):
+    pharmacy = models.OneToOneField("administration.PharmacyApplication", on_delete=models.CASCADE, related_name="stock_settings")
+    method = models.CharField(max_length=10, choices=[("manual", "Manual"), ("csv", "CSV imports")], default="manual")
+    column_mapping = models.JSONField(default=dict, blank=True)
+    version = models.PositiveIntegerField(default=1)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+class StockImport(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    pharmacy = models.ForeignKey("administration.PharmacyApplication", on_delete=models.CASCADE, related_name="stock_imports")
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    filename = models.CharField(max_length=200)
+    headers = models.JSONField(default=list)
+    records = models.JSONField(default=list)
+    mapping = models.JSONField(default=dict)
+    preview = models.JSONField(default=list)
+    plan = models.JSONField(default=list)
+    state = models.CharField(max_length=12, default="uploaded")
+    version = models.PositiveIntegerField(default=1)
+    error_count = models.PositiveIntegerField(default=0)
+    row_count = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    applied_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+
+
 class PrescriptionReview(models.Model):
     prescription = models.OneToOneField("customer_data.CustomerPrescription", on_delete=models.PROTECT, related_name="pharmacy_review")
     pharmacy = models.ForeignKey("administration.PharmacyApplication", on_delete=models.PROTECT)
