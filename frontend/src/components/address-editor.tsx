@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ComponentRef } from 'react';
 import { Modal, View, ScrollView, KeyboardAvoidingView, Platform, TextInput } from 'react-native';
-import { emptyAddress, validateAddress, type DeliveryAddress, type AddressErrors } from '../domain/checkout';
+import { detectCdoLocation } from '../api/device-location';
+import { emptyAddress, validateAddress, type DeliveryAddress } from '../domain/checkout';
 import { CheckoutField } from './checkout-field';
 import { Button, Text, colors, s } from './ui';
 
@@ -9,41 +10,74 @@ export function AddressEditor({ visible, address, onSave, onCancel }: {
 }) {
   const [values, setValues] = useState(emptyAddress);
   const [attempted, setAttempted] = useState(false);
+  const [detecting, setDetecting] = useState(false);
+  const [locationIssue, setLocationIssue] = useState('');
+  const detectionId = useRef(0);
   const streetRef = useRef<ComponentRef<typeof TextInput>>(null);
   const barangayRef = useRef<ComponentRef<typeof TextInput>>(null);
-  const cityRef = useRef<ComponentRef<typeof TextInput>>(null);
-  const provinceRef = useRef<ComponentRef<typeof TextInput>>(null);
-  const postalRef = useRef<ComponentRef<typeof TextInput>>(null);
-  useEffect(() => { if (visible) { setValues(address ? { ...address } : emptyAddress()); setAttempted(false); } }, [visible, address]);
-  const errors: AddressErrors = attempted ? validateAddress(values) : {};
+
+  useEffect(() => {
+    if (visible) {
+      setValues(address ? { ...address } : emptyAddress());
+      setAttempted(false);
+      setDetecting(false);
+      setLocationIssue('');
+    }
+    return () => { detectionId.current++; };
+  }, [visible, address]);
+
+  const errors = attempted ? validateAddress(values) : {};
+
   function save() {
     setAttempted(true);
     const current = validateAddress(values);
-    if (Object.keys(current).length) {
-      if (current.street) streetRef.current?.focus();
-      else if (current.barangay) barangayRef.current?.focus();
-      else if (current.city) cityRef.current?.focus();
-      else if (current.province) provinceRef.current?.focus();
-      else postalRef.current?.focus();
-      return;
-    }
-    onSave(Object.fromEntries(Object.entries(values).map(([key, value]) => [key, value.trim()])) as DeliveryAddress);
+    if (current.street) { streetRef.current?.focus(); return; }
+    if (current.barangay) { barangayRef.current?.focus(); return; }
+    detectionId.current++;
+    onSave({ ...values, street: values.street.trim(), barangay: values.barangay.trim(), city: values.city.trim() || emptyAddress().city });
   }
-  const change = (key: keyof DeliveryAddress, value: string) => setValues(previous => ({ ...previous, [key]: value }));
-  return <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
+
+  function cancel() {
+    detectionId.current++;
+    onCancel();
+  }
+
+  function changeBarangay(barangay: string) {
+    detectionId.current++;
+    setDetecting(false);
+    setLocationIssue('');
+    setValues(previous => ({ ...previous, barangay }));
+  }
+
+  async function useDeviceLocation() {
+    const id = ++detectionId.current;
+    setDetecting(true);
+    setLocationIssue('');
+    try {
+      const place = await detectCdoLocation();
+      if (id === detectionId.current) {
+        setValues(previous => ({ ...emptyAddress(), street: place.street || previous.street, barangay: place.barangay }));
+      }
+    } catch (error) {
+      if (id === detectionId.current) {
+        setLocationIssue(error instanceof Error ? error.message : 'Could not detect your location. Enter your barangay manually.');
+      }
+    } finally {
+      if (id === detectionId.current) setDetecting(false);
+    }
+  }
+
+  return <Modal visible={visible} transparent animationType="fade" onRequestClose={cancel}>
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: '#162A2480', justifyContent: 'center', padding: 16 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <View style={{ width: '100%', maxWidth: 560, maxHeight: '95%', alignSelf: 'center', backgroundColor: colors.white, borderRadius: 12, overflow: 'hidden' }}>
+      <View accessibilityViewIsModal style={{ width: '100%', maxWidth: 560, maxHeight: '95%', alignSelf: 'center', backgroundColor: colors.white, borderRadius: 12, overflow: 'hidden' }}>
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 20, gap: 16 }}>
           <Text accessibilityRole="header" style={s.heading}>{address ? 'Edit delivery address' : 'Add delivery address'}</Text>
-          <Text style={s.muted}>Required fields are marked *.</Text>
-          <CheckoutField ref={streetRef} label="House/building and street *" placeholder="House number, street, building or unit" value={values.street} onChangeText={value => change('street', value)} error={errors.street} maxLength={160} autoCapitalize="words" returnKeyType="next" onSubmitEditing={() => barangayRef.current?.focus()} />
-          <CheckoutField ref={barangayRef} label="Barangay *" value={values.barangay} onChangeText={value => change('barangay', value)} error={errors.barangay} maxLength={80} autoCapitalize="words" returnKeyType="next" onSubmitEditing={() => cityRef.current?.focus()} />
-          <CheckoutField ref={cityRef} label="City / municipality *" value={values.city} onChangeText={value => change('city', value)} error={errors.city} maxLength={80} autoCapitalize="words" returnKeyType="next" onSubmitEditing={() => provinceRef.current?.focus()} />
-          <CheckoutField ref={provinceRef} label="Province *" value={values.province} onChangeText={value => change('province', value)} error={errors.province} maxLength={80} autoCapitalize="words" returnKeyType="next" onSubmitEditing={() => postalRef.current?.focus()} />
-          <CheckoutField ref={postalRef} label="Postal code (optional)" value={values.postalCode} onChangeText={value => change('postalCode', value)} error={errors.postalCode} maxLength={4} keyboardType="number-pad" returnKeyType="done" onSubmitEditing={save} />
+          <Button title={detecting ? 'Detecting location...' : 'Use my location'} secondary icon="map-pin" disabled={detecting} onPress={useDeviceLocation} />
+          {!!locationIssue && <Text accessibilityRole="alert" style={{ color: colors.danger }}>{locationIssue}</Text>}
+          <CheckoutField ref={streetRef} label="House/building and street" required value={values.street} onChangeText={street => setValues(previous => ({ ...previous, street }))} error={errors.street} maxLength={160} autoCapitalize="words" returnKeyType="next" onSubmitEditing={() => barangayRef.current?.focus()} />
+          <CheckoutField ref={barangayRef} label="Barangay" required value={values.barangay} onChangeText={changeBarangay} error={errors.barangay} maxLength={80} autoCapitalize="words" returnKeyType="done" onSubmitEditing={save} />
           <Button title="Save address" icon="check" onPress={save} />
-          <Button title="Cancel" secondary onPress={onCancel} />
-          <Text style={s.caption}>Saved for this session. Delivery coverage is unconfirmed.</Text>
+          <Button title="Cancel" secondary onPress={cancel} />
         </ScrollView>
       </View>
     </KeyboardAvoidingView>

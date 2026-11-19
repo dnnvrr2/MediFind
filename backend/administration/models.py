@@ -13,6 +13,7 @@ class ReviewStatus(models.TextChoices):
     NEEDS_INFO = "Needs Info"
     APPROVED = "Approved"
     REJECTED = "Rejected"
+    ARCHIVED = "Archived"
 
 
 class PharmacyApplication(models.Model):
@@ -29,6 +30,7 @@ class PharmacyApplication(models.Model):
     opening_schedule = models.JSONField(default=list, blank=True)
     hours = models.CharField(max_length=500, blank=True)
     is_open = models.BooleanField(default=False)
+    accepts_orders = models.BooleanField(default=False)
     status = models.CharField(max_length=16, choices=ReviewStatus.choices, default=ReviewStatus.PENDING, editable=False)
     notes = models.TextField(blank=True, editable=False)
     version = models.PositiveIntegerField(default=1, editable=False)
@@ -83,7 +85,7 @@ class MedicineRequest(models.Model):
     unit = models.CharField(max_length=40, default="unit")
     prescription = models.BooleanField(default=True)
     pharmacy = models.ForeignKey(PharmacyApplication, on_delete=models.PROTECT, related_name="medicine_requests")
-    status = models.CharField(max_length=16, choices=[(v, v) for v in ("Pending", "Approved", "Rejected")], default="Pending", editable=False)
+    status = models.CharField(max_length=16, choices=[(v, v) for v in ("Pending", "Approved", "Rejected", "Archived")], default="Pending", editable=False)
     notes = models.TextField(blank=True, editable=False)
     version = models.PositiveIntegerField(default=1, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)

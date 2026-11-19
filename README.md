@@ -1,8 +1,8 @@
 # Online Medicine Search and Ordering System
 
-## Customer preview — first milestone
+## MediFind
 
-The Expo frontend runs on Android/iOS and in desktop/mobile browsers. It follows the customer sample screens with a teal theme, responsive cards, explicit pharmacy selection, unit prices, and one pharmacy per cart.
+MediFind connects customers, pharmacies, staff, and riders. The Expo frontend runs on Android, iOS, and the web.
 
 ### Run
 
@@ -16,25 +16,19 @@ The Expo frontend runs on Android/iOS and in desktop/mobile browsers. It follows
 
 Pharmacy inventory supports owner-configured Manual updates and CSV imports. Open **Inventory → Stock settings** to configure the method, download a template, and preview imports before applying them. See [Stock updates](docs/STOCK_UPDATES.md) for matching rules and reservation protection.
 
-- Home with medicine search and quick searches.
+- Home with medicine search and participating pharmacies.
 - Search by name, generic, strength, and form, with OTC/prescription filters and a no-results state.
 - Medicine details, with exact strength, form, and sales unit.
 - Pharmacy availability with explicit selection, stock, unit price, quantity, and subtotal.
 - Pharmacy list and details with medicine listings.
 - Shopping cart with quantities, removal, subtotal, stock limits, and confirmed replacement when switching pharmacy.
 - Checkout with pickup/delivery, recipient validation, editable delivery address, fees, payment labels, and a review step.
-- Demo order submission and confirmation, Current/Previous order lists, stored order details, separate pickup/delivery tracking, confirmed cancellation, and simulated rejection/delivery failure with reasons.
-- Prescription history and local JPG/PNG/PDF file selection with image preview, full-size inspection, local PDF opening, file replacement, and a mobile camera option.
-- Sample request items are selected manually and clearly separated from uploaded files. Pharmacy availability is shown per item with estimated totals and partial stock.
-- Pending review and simulated approved, partially approved, rejected, and clearer-photo states with reasons. Approved medicine, quantity, pharmacy, and file version are checked in the cart and checkout; orders keep the review reference.
-- Home, Prescriptions, Cart, Orders, and Profile navigation on mobile and desktop. Pharmacy browsing remains available from Home and medicine search.
-- Profile overview, edit profile, demo sign-in, demo registration, and password-reset confirmation screens.
-- Responsive desktop navigation and mobile bottom navigation.
-- Unknown medicine/pharmacy/page fallbacks.
+- Pharmacy order submission, pickup and delivery tracking, and cancellation before pharmacy acceptance.
+- Private prescription uploads, pharmacist review, and ordering of approved items.
+- Account registration, sign-in, profile editing, and password resets.
+- Rider applications, staff approval, and delivery dispatch.
 
-### Preview boundaries
-
-All pharmacies, stock, classifications, hours, and prices are sample data, not verified live listings. The Django API provides customer accounts and stores preview orders and private prescription files, but it does not place real pharmacy orders, confirm stock, collect payments, or provide clinical dosing advice. Rider delivery assignments are manually created by staff after direct pharmacy confirmation; they do not connect to an order acceptance or inventory system. Simulated review buttons never represent pharmacist or medical approval. A real pharmacist must verify every prescription and item before fulfillment. Cart and checkout draft remain in memory and clear on browser refresh or app restart. The shared data lives in `frontend/src/data/catalog.ts`.
+The catalog comes from approved pharmacy records and inventory in PostgreSQL. Each signed-in account's cart is saved on the current device. Checkout details are kept for the current session. Payment is collected at pickup or delivery.
 
 ### Structure
 
@@ -43,7 +37,7 @@ frontend/
   src/
     app/           # Expo Router screens and navigation
     components/    # Shared controls and visual styles
-    data/          # Typed sample catalog
+    data/          # Pharmacy catalog
     domain/        # Stock and cart rules
     state/         # Session state for cart, checkout, orders, and prescriptions
   tests/           # Search, cart, checkout, order, and prescription checks
@@ -65,7 +59,7 @@ npm run typecheck
 npm run build:web
 ```
 
-Prescription flow implementation is in `docs/MILESTONE_3_PRESCRIPTIONS.md`. AI recognition is excluded. Checkout and simulated orders are described in docs/MILESTONE_1_CHECKOUT.md and docs/MILESTONE_2_ORDERS.md. Rider implementation and its current integration limits are in docs/RIDER_PORTAL.md.
+See the backend API notes for current ordering and prescription behavior.
 
 
 ## Customer design update
@@ -74,4 +68,4 @@ The existing customer screens now use locally bundled Inter fonts, the custom SV
 
 ## Rider portal
 
-A rider sign-in and delivery workflow is available at `/rider/login`. Rider accounts are created and approved in Django admin, and assignments are made manually after pharmacy readiness is verified. See [docs/RIDER_PORTAL.md](docs/RIDER_PORTAL.md) for setup, lifecycle, and integration limits. The preview still has no automatic pharmacy dispatch, live tracking, push notifications, or payment settlement.
+Riders sign in at `/rider/login`. Staff approve rider applications, and dispatch assigns riders after the pharmacy confirms the order is ready. See [Rider portal](docs/RIDER_PORTAL.md) for the delivery workflow.

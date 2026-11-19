@@ -1,4 +1,4 @@
-from django.db import transaction
+from django.db import models, transaction
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -23,13 +23,33 @@ class StaffView(APIView):
 
 class PharmaciesView(StaffView):
     def get(self, request):
-        records = PharmacyApplication.objects.prefetch_related("documents", "history")
+        records = PharmacyApplication.objects.exclude(status="Archived").prefetch_related("documents", "history")
         return Response(PharmacySerializer(records, many=True).data)
+
+class PharmacyRemoveView(StaffView):
+    class Input(serializers.Serializer):
+        version = serializers.IntegerField(min_value=1)
+
+    def delete(self, request, pk):
+        payload = self.Input(data=request.data)
+        payload.is_valid(raise_exception=True)
+        with transaction.atomic():
+            pharmacy = get_object_or_404(PharmacyApplication.objects.select_for_update().exclude(status="Archived"), pk=pk)
+            if pharmacy.version != payload.validated_data["version"]:
+                raise Conflict()
+            previous = pharmacy.status
+            now = timezone.now()
+            changed = PharmacyApplication.objects.filter(pk=pk, version=pharmacy.version, status__in=["Draft", "Pending", "Needs Info", "Approved", "Rejected"]).update(status="Archived", version=pharmacy.version + 1, updated_at=now)
+            if not changed:
+                raise Conflict()
+            MedicineRequest.objects.filter(pharmacy=pharmacy).exclude(status="Archived").update(status="Archived", version=models.F("version") + 1, updated_at=now)
+            ReviewEvent.objects.create(pharmacy=pharmacy, actor=request.user, actor_email=request.user.email, previous_status=previous, status="Archived", notes="Pharmacy removed by staff.")
+        return Response(status=204)
 
 
 class MedicinesView(StaffView):
     def get(self, request):
-        records = MedicineRequest.objects.select_related("pharmacy").prefetch_related("history")
+        records = MedicineRequest.objects.exclude(status="Archived").exclude(pharmacy__status="Archived").select_related("pharmacy").prefetch_related("history")
         return Response(MedicineSerializer(records, many=True).data)
 
 
@@ -44,7 +64,7 @@ class ReviewView(StaffView):
         is_pharmacy = self.kind == "pharmacy"
         model = PharmacyApplication if is_pharmacy else MedicineRequest
         with transaction.atomic():
-            record = get_object_or_404(model.objects.select_for_update(), pk=pk)
+            record = get_object_or_404(model.objects.select_for_update().exclude(status="Archived"), pk=pk)
             if record.version != decision["version"]:
                 raise Conflict()
             if record.status not in ("Pending", "Needs Info"):
@@ -82,7 +102,7 @@ class PharmacyLocationView(StaffView):
         payload = self.Input(data=request.data)
         payload.is_valid(raise_exception=True)
         with transaction.atomic():
-            pharmacy = get_object_or_404(PharmacyApplication.objects.select_for_update(), pk=pk)
+            pharmacy = get_object_or_404(PharmacyApplication.objects.select_for_update().exclude(status="Archived"), pk=pk)
             pharmacy.latitude = payload.validated_data["latitude"]
             pharmacy.longitude = payload.validated_data["longitude"]
             pharmacy.location_verified = True
@@ -99,7 +119,7 @@ class MedicineReviewView(ReviewView):
 
 class DocumentView(StaffView):
     def get(self, request, pk):
-        document = get_object_or_404(PharmacyDocument, pk=pk)
+        document = get_object_or_404(PharmacyDocument.objects.exclude(application__status="Archived"), pk=pk)
         if not document.file:
             raise Http404
         try:

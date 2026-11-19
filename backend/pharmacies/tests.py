@@ -42,7 +42,16 @@ class PartnershipTests(APITestCase):
         for kind in ["FDA", "Business", "Pharmacist"]:
             response = self.client.post("/api/pharmacy/documents/", {"kind": kind, "file": SimpleUploadedFile(kind + ".pdf", b"%PDF-1.4\nexample", content_type="application/pdf")}, format="multipart")
             self.assertEqual(response.status_code, 200)
-        response = self.client.post("/api/pharmacy/application/submit/", {}, format="json")
+        submit_url = "/api/pharmacy/application/submit/"
+        missing = self.client.post(submit_url, {}, format="json")
+        self.assertEqual(missing.status_code, 400)
+        self.assertIn("map pin", str(missing.data["address"]))
+        details = {"address": "Test Street, Carmen, Cagayan de Oro City", "latitude": 8.4772, "longitude": 124.647}
+        saved = self.client.patch("/api/pharmacy/me/", details, format="json")
+        self.assertEqual(saved.status_code, 200, saved.data)
+        self.assertEqual(saved.data["submitted_point"], {"lat": 8.4772, "lon": 124.647})
+        self.assertIsNone(saved.data["point"])
+        response = self.client.post(submit_url, {}, format="json")
         self.assertEqual(response.status_code, 200)
         app.refresh_from_db()
         self.assertEqual(app.status, "Pending")
@@ -50,6 +59,48 @@ class PartnershipTests(APITestCase):
         self.assertFalse(self.owner.pharmacy_member.verified_pharmacist)
         response = self.client.patch("/api/pharmacy/me/", {"name": "Changed"}, format="json")
         self.assertEqual(response.status_code, 409)
+
+    def test_open_status_and_order_acceptance_are_independent_settings(self):
+        app = self.approved()
+        self.assertEqual(self.client.post('/api/pharmacy/open/', {'is_open': True}, format='json').status_code, 200)
+        self.assertEqual(self.client.post('/api/pharmacy/accept-orders/', {'accepts_orders': False}, format='json').status_code, 200)
+        app.refresh_from_db()
+        self.assertTrue(app.is_open)
+        self.assertFalse(app.accepts_orders)
+        from .services import pharmacy_data
+        public = pharmacy_data(app)
+        self.assertTrue(public['isOpen'])
+        self.assertFalse(public['acceptsOrders'])
+
+    def test_applicant_pin_requires_an_address_and_staff_verification(self):
+        app = self.draft()
+        self.assertEqual(self.client.patch("/api/pharmacy/me/", {"latitude": 8.4772}, format="json").status_code, 400)
+        self.assertEqual(self.client.patch("/api/pharmacy/me/", {
+            "latitude": 8.4772, "longitude": 124.647,
+        }, format="json").status_code, 400)
+        saved = self.client.patch("/api/pharmacy/me/", {
+            "address": self.details["address"], "latitude": 8.4772, "longitude": 124.647,
+        }, format="json")
+        self.assertEqual(saved.status_code, 200)
+        self.assertIsNone(saved.data["point"])
+
+        staff = Customer.objects.create_superuser("pin-reviewer@example.com", "test-password-123", full_name="Pin Reviewer")
+        self.client.force_authenticate(staff)
+        records = self.client.get("/api/administration/pharmacies/").data
+        self.assertEqual(records[0]["submitted_point"], {"lat": 8.4772, "lon": 124.647})
+        self.assertIsNone(records[0]["point"])
+        verified = self.client.post(f"/api/administration/pharmacies/{app.pk}/location/", {
+            "latitude": 8.4772, "longitude": 124.647,
+        }, format="json")
+        self.assertEqual(verified.data["point"], {"lat": 8.4772, "lon": 124.647})
+
+        self.client.force_authenticate(self.owner)
+        moved = self.client.patch("/api/pharmacy/me/", {
+            "address": "New Street, Carmen, Cagayan de Oro City", "latitude": 8.478, "longitude": 124.65,
+        }, format="json")
+        self.assertEqual(moved.status_code, 200)
+        self.assertEqual(moved.data["submitted_point"], {"lat": 8.478, "lon": 124.65})
+        self.assertIsNone(moved.data["point"])
 
     def test_missing_or_invalid_documents_do_not_submit(self):
         app = self.draft()

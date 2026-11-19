@@ -31,7 +31,7 @@ function ColumnMatch({ field, value, headers, sample, disabled, onChange }: { fi
   return <View style={{ gap: 6 }}>
     <Text style={s.link}>{field}</Text>
     <Button title={value || 'Not matched'} secondary disabled={disabled} onPress={() => setOpen(true)} />
-    {!!value && <Text numberOfLines={2} style={s.caption}>Example: {sample[value] || '(empty)'}</Text>}
+    {!!value && <Text numberOfLines={2} style={s.caption}>First row: {sample[value] || '(empty)'}</Text>}
     <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
       <View style={{ flex: 1, padding: 24, justifyContent: 'center', backgroundColor: '#00000066' }}>
         <View style={[s.card, { maxHeight: '85%', width: '100%', maxWidth: 600, alignSelf: 'center' }]}>
@@ -120,7 +120,7 @@ function StockSettingsContent() {
         {method === 'csv' && settings.method !== 'csv' && <Card><Text style={s.muted}>Save CSV imports as the method to enable uploads.</Text></Card>}
         {settings.method === 'csv' && <Card>
           <Text style={s.heading}>{importRequested === '1' ? 'Import stock CSV' : 'CSV imports'}</Text>
-          <Text style={s.muted}>Upload → Match columns → Preview → Confirm</Text>
+
           <Text style={s.text}>Stock is the total physical quantity, including reserved units. Imports replace counts; they do not add quantities.</Text>
           <Text style={s.muted}>UTF-8 CSV · Up to 2 MB and 1,000 rows. Only approved medicines in this branch can be updated.</Text>
           <Button title={busy ? 'Please wait...' : 'Import CSV'} icon="upload" disabled={busy || method !== settings.method} onPress={() => void run(chooseFile)} />

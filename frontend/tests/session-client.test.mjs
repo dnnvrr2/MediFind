@@ -25,7 +25,7 @@ test('public authentication never sends the previous account bearer', async () =
   const client = loadClient(async (url, init) => { assert.equal(init.headers.get('Authorization'), null); return json({ customer: { id: 2 }, access: 'new', refresh: 'new-r' }); });
   await client.setSession({ access: 'expired', refresh: 'old-r' });
   await client.api.login({ email: 'new@example.com', password: 'password123' });
-  await client.api.register({ email: 'new@example.com', password: 'password123', full_name: 'New', phone: '' });
+  await client.api.register({ email: 'new@example.com', password: 'password123', first_name: 'New', last_name: 'Customer', phone: '09171234567' });
   await client.api.requestPasswordReset('new@example.com');
 });
 

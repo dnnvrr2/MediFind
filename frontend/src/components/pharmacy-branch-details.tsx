@@ -3,6 +3,7 @@ import { View } from 'react-native';
 import type { PharmacyApplication } from '../api/client';
 import { contactsError } from '../domain/pharmacy-contacts';
 import { defaultSchedule, scheduleError, scheduleSummary, type OpeningDay } from '../domain/pharmacy-schedule';
+import { RequiredMark } from './checkout-field';
 import { PharmacyContactsEditor } from './pharmacy-contacts-editor';
 import { OpeningHoursEditor } from './opening-hours-editor';
 import { Button, Text, s } from './ui';
@@ -22,6 +23,6 @@ export function usePharmacyBranchDetails(app: PharmacyApplication | null, fallba
 export function PharmacyBranchDetailsFields({ details, disabled = false, readOnly = false, attempted = false }: { details: ReturnType<typeof usePharmacyBranchDetails>; disabled?: boolean; readOnly?: boolean; attempted?: boolean }) {
   return <View style={{ gap: 24 }}>
     <PharmacyContactsEditor values={details.contacts} onChange={details.setContacts} disabled={disabled} readOnly={readOnly} attempted={attempted} />
-    {details.scheduleActive ? <OpeningHoursEditor value={details.schedule} onChange={details.setSchedule} disabled={disabled} readOnly={readOnly} /> : <View style={{ gap: 10 }}><Text style={s.heading}>Opening hours *</Text><Text style={s.muted}>{details.hours}</Text>{!readOnly && <Button title="Set days and times" secondary icon="clock" disabled={disabled} onPress={() => details.setScheduleActive(true)} />}</View>}
+    {details.scheduleActive ? <OpeningHoursEditor value={details.schedule} onChange={details.setSchedule} disabled={disabled} readOnly={readOnly} /> : <View style={{ gap: 10 }}><Text style={s.heading} accessibilityLabel={readOnly ? undefined : 'Opening hours, required'}>Opening hours{!readOnly && <RequiredMark />}</Text><Text style={s.muted}>{details.hours}</Text>{!readOnly && <Button title="Set days and times" secondary icon="clock" disabled={disabled} onPress={() => details.setScheduleActive(true)} />}</View>}
   </View>;
 }

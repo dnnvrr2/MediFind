@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from administration.models import PharmacyApplication, MedicineRequest
-from administration.serializers import DocumentSerializer, EventSerializer
+from administration.serializers import DocumentSerializer, EventSerializer, branch_point
 from .models import Inventory, PharmacyAudit
 from .branch_details import normalize_contact, validate_contacts, validate_schedule, schedule_summary
 
@@ -16,10 +16,12 @@ class OpeningDayInput(serializers.Serializer):
 class ApplicationInput(serializers.ModelSerializer):
     contact_numbers = serializers.ListField(child=serializers.CharField(max_length=30), max_length=5, required=False)
     opening_schedule = OpeningDayInput(many=True, required=False)
+    latitude = serializers.DecimalField(max_digits=9, decimal_places=6, min_value=-90, max_value=90, required=False)
+    longitude = serializers.DecimalField(max_digits=10, decimal_places=6, min_value=-180, max_value=180, required=False)
 
     class Meta:
         model = PharmacyApplication
-        fields = ("name", "address", "applicant", "email", "phone", "hours", "contact_numbers", "opening_schedule")
+        fields = ("name", "address", "applicant", "email", "phone", "hours", "contact_numbers", "opening_schedule", "latitude", "longitude")
 
     def validate_contact_numbers(self, values):
         return validate_contacts(values)
@@ -31,6 +33,18 @@ class ApplicationInput(serializers.ModelSerializer):
         return normalize_contact(value) if value.strip() else ""
 
     def validate(self, data):
+        has_pin = "latitude" in data or "longitude" in data
+        if has_pin and not all(key in data for key in ("latitude", "longitude", "address")):
+            raise serializers.ValidationError({"address": "Confirm both the map pin and the branch address."})
+        if self.instance and "address" in data:
+            address_changed = data["address"] != self.instance.address
+            pin_changed = has_pin and (
+                data["latitude"] != self.instance.latitude or data["longitude"] != self.instance.longitude
+            )
+            if address_changed or pin_changed:
+                data["location_verified"] = False
+            if address_changed and not has_pin:
+                data["latitude"] = data["longitude"] = None
         if "contact_numbers" in data:
             data["phone"] = data["contact_numbers"][0] if data["contact_numbers"] else ""
         elif "phone" in data:
@@ -67,8 +81,13 @@ class DecisionInput(serializers.Serializer):
     approved = serializers.ListField(child=serializers.DictField(), default=list)
 
 
+class UndoOrderInput(serializers.Serializer):
+    version = serializers.IntegerField(min_value=1)
+    expected_status = serializers.CharField(max_length=30)
+
+
 def application_data(app):
-    return {"id": str(app.pk), "name": app.name, "address": app.address, "applicant": app.applicant, "email": app.email, "phone": app.phone, "hours": app.hours, "contact_numbers": app.contact_numbers, "opening_schedule": app.opening_schedule, "is_open": app.is_open, "point": {"lat": float(app.latitude), "lon": float(app.longitude)} if app.location_verified and app.latitude is not None and app.longitude is not None else None, "status": app.status, "notes": app.notes, "version": app.version, "documents": DocumentSerializer(app.documents.all(), many=True).data, "history": EventSerializer(app.history.all(), many=True).data}
+    return {"id": str(app.pk), "name": app.name, "address": app.address, "applicant": app.applicant, "email": app.email, "phone": app.phone, "hours": app.hours, "contact_numbers": app.contact_numbers, "opening_schedule": app.opening_schedule, "is_open": app.is_open, "accepts_orders": app.accepts_orders, "point": branch_point(app) if app.location_verified else None, "submitted_point": branch_point(app), "status": app.status, "notes": app.notes, "version": app.version, "documents": DocumentSerializer(app.documents.all(), many=True).data, "history": EventSerializer(app.history.all(), many=True).data}
 
 
 def audit_data(rows):

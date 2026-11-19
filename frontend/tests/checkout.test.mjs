@@ -1,3 +1,4 @@
+import './catalog-fixture.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { quoteCheckout, validateCheckout, validateAddress, normalizePhone, initialCheckout, emptyAddress, addressText } from '../src/domain/checkout.ts';
@@ -23,7 +24,10 @@ test('multiple medicines and fractional peso prices retain exact quantities and 
 test('recipient validation accepts local and international mobile formats', () => {
   assert.deepEqual(validateCheckout(contact), {});
   for (const phone of ['09170000000', '+639170000000', '639170000000', '+63 917 000 0000', '0917-000-0000']) assert.equal(normalizePhone(phone), '+639170000000');
-  for (const phone of ['', '123', '0917000000', '091700000000', 'abc09170000000']) assert.ok(validateCheckout({ ...contact, phone }).phone);
+  assert.equal(validateCheckout({ ...contact, phone: '' }).phone, 'Enter your mobile number.');
+  for (const phone of ['123', '0917000000', '091700000000', 'abc09170000000']) {
+    assert.equal(validateCheckout({ ...contact, phone }).phone, 'Invalid number');
+  }
   assert.ok(validateCheckout({ ...contact, name: '   ' }).name);
 });
 
@@ -31,9 +35,10 @@ test('delivery requires a complete address while pickup retains but ignores it',
   assert.ok(validateCheckout({ ...contact, method: 'delivery' }).address);
   assert.deepEqual(validateCheckout({ ...contact, method: 'delivery', address }), {});
   assert.deepEqual(validateCheckout({ ...contact, method: 'pickup', address: emptyAddress() }), {});
-  assert.equal(Object.keys(validateAddress(null)).length, 4);
-  assert.ok(validateAddress({ ...address, postalCode: '90A0' }).postalCode);
-  assert.deepEqual(validateAddress({ ...address, postalCode: '' }), {});
+  assert.deepEqual(Object.keys(validateAddress(null)), ['street', 'barangay']);
+  const newAddress = { ...emptyAddress(), street: address.street, barangay: address.barangay };
+  assert.deepEqual(validateCheckout({ ...contact, method: 'delivery', address: newAddress }), {});
+  assert.equal(addressText(newAddress), '123 Sample Street, Sample Barangay, Cagayan de Oro City');
   assert.equal(addressText(address), '123 Sample Street, Sample Barangay, Cagayan de Oro City, Misamis Oriental, 9000');
 });
 

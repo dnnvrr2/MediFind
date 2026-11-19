@@ -21,6 +21,6 @@ export default function Orders() {
       <Text style={s.muted}>{order.lines.length} {order.lines.length === 1 ? 'item' : 'items'} · {order.method === 'pickup' ? 'Pickup' : 'Delivery'} · {order.payment}</Text>
       <View style={s.between}><Text style={s.price}>{money(order.total)}</Text><View style={s.row}><Text style={s.link}>View details</Text><Icon name="arrow-right" size={18} /></View></View>
     </Pressable>)}
-    {!shown.length && <View style={{ alignItems: 'center', paddingVertical: 32, gap: 16 }}><Icon name="orders" size={40} color={colors.muted} /><Text style={s.heading}>{previous ? 'No previous orders' : 'No current orders'}</Text><Text style={[s.muted, { textAlign: 'center', maxWidth: 400 }]}>{previous ? 'Completed and closed orders appear here.' : 'Create an order preview from your cart.'}</Text><Button title="Browse medicines" onPress={() => router.push('/search')} /></View>}
+    {!shown.length && <View style={{ alignItems: 'center', paddingVertical: 32, gap: 16 }}><Icon name="orders" size={40} color={colors.muted} /><Text style={s.heading}>{previous ? 'No previous orders' : 'No current orders'}</Text><Button title="Browse medicines" onPress={() => router.push('/search')} /></View>}
   </Page>;
 }

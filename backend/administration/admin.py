@@ -24,6 +24,9 @@ class PharmacyAdmin(admin.ModelAdmin):
     inlines = (DocumentInline,)
     readonly_fields = ("status", "notes", "version", "created_at", "updated_at")
 
+    def get_queryset(self, request):
+        return super().get_queryset(request).exclude(status="Archived")
+
     def get_readonly_fields(self, request, obj=None):
         if obj and obj.status in ("Approved", "Rejected"):
             return tuple(field.name for field in self.model._meta.fields if field.name not in ("latitude", "longitude", "location_verified"))
@@ -55,6 +58,9 @@ class MedicineAdmin(ReadOnlyAdmin):
     list_display = ("name", "description", "pharmacy", "status", "created_at")
     search_fields = ("name", "pharmacy__name")
     list_filter = ("status",)
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).exclude(status="Archived").exclude(pharmacy__status="Archived")
 
 
 @admin.register(ReviewEvent)

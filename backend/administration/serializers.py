@@ -22,19 +22,27 @@ class DocumentSerializer(serializers.ModelSerializer):
         fields = ("id", "kind", "name", "created_at", "file_name")
 
 
+def branch_point(app):
+    if app.latitude is None or app.longitude is None:
+        return None
+    return {"lat": float(app.latitude), "lon": float(app.longitude)}
+
+
 class PharmacySerializer(serializers.ModelSerializer):
     documents = DocumentSerializer(many=True, read_only=True)
     history = EventSerializer(many=True, read_only=True)
     point = serializers.SerializerMethodField()
+    submitted_point = serializers.SerializerMethodField()
 
     def get_point(self, obj):
-        if not obj.location_verified or obj.latitude is None or obj.longitude is None:
-            return None
-        return {"lat": float(obj.latitude), "lon": float(obj.longitude)}
+        return branch_point(obj) if obj.location_verified else None
+
+    def get_submitted_point(self, obj):
+        return branch_point(obj)
 
     class Meta:
         model = PharmacyApplication
-        fields = ("id", "name", "address", "applicant", "email", "phone", "status", "notes", "version", "created_at", "documents", "history", "point", "contact_numbers", "hours", "opening_schedule")
+        fields = ("id", "name", "address", "applicant", "email", "phone", "status", "notes", "version", "created_at", "documents", "history", "point", "submitted_point", "contact_numbers", "hours", "opening_schedule")
         read_only_fields = fields
 
 

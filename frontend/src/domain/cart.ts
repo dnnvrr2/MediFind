@@ -24,3 +24,31 @@ export function changeQuantity(items: CartItem[], medicineId: string, quantity: 
   });
 }
 export const cartTotal = (items: CartItem[]) => items.reduce((sum, i) => sum + (offers.find(o => o.medicineId === i.medicineId && o.pharmacyId === i.pharmacyId)?.price ?? 0) * i.quantity, 0);
+
+function isCartItem(value: unknown): value is CartItem {
+  if (!value || typeof value !== 'object') return false;
+  const item = value as Partial<CartItem>;
+  return typeof item.medicineId === 'string' && !!item.medicineId &&
+    typeof item.pharmacyId === 'string' && !!item.pharmacyId &&
+    typeof item.quantity === 'number' && Number.isSafeInteger(item.quantity) && item.quantity > 0 &&
+    (item.prescriptionId === undefined || typeof item.prescriptionId === 'string') &&
+    (item.revision === undefined || Number.isSafeInteger(item.revision)) &&
+    (item.snapshot === undefined || (item.snapshot !== null && typeof item.snapshot.name === 'string' &&
+      typeof item.snapshot.strength === 'string' && typeof item.snapshot.form === 'string'));
+}
+
+export function parseSavedCart(raw: string): CartItem[] | null {
+  try {
+    const items: unknown = JSON.parse(raw);
+    if (!Array.isArray(items) || !items.every(isCartItem)) return null;
+    const pharmacy = items[0]?.pharmacyId;
+    const medicines = new Set<string>();
+    for (const item of items) {
+      if (item.pharmacyId !== pharmacy || medicines.has(item.medicineId)) return null;
+      medicines.add(item.medicineId);
+    }
+    return items;
+  } catch {
+    return null;
+  }
+}

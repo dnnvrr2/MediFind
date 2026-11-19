@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, StyleSheet, TextInput, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Modal, Platform, Pressable, StyleSheet, TextInput, View, useWindowDimensions } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Icon, type IconName } from '../components/icon';
-import { Back, Badge, Button, Card, DetailRow, Page, Text, TextLink, colors, s } from '../components/ui';
+import { Back, Badge, Button, Card, DetailRow, FilterChips, Page, Text, TextLink, colors, s } from '../components/ui';
 import { CheckoutField } from '../components/checkout-field';
 import { ProfileLinks } from '../components/profile-links';
+import { AreaMap } from '../components/area-map';
 import { AdminRiders } from '../components/admin-riders';
 import { useProfile } from '../state/profile';
 import { reviewRecord, reviewCounts, type MedicineReviewStatus } from '../domain/admin';
@@ -23,7 +24,6 @@ const a = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 16 },
   icon: { width: 48, height: 48, borderRadius: 10, backgroundColor: colors.pale, alignItems: 'center', justifyContent: 'center' },
   search: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: '#AEBFB7', borderRadius: 8, paddingHorizontal: 14, backgroundColor: colors.white },
-  filter: { minHeight: 44, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.white, justifyContent: 'center' },
 });
 function StatusBadge({ status }: { status: string }) {
   if (status === 'Rejected') return <View style={{ backgroundColor: '#FCECEB', borderRadius: 5, paddingHorizontal: 9, paddingVertical: 4, alignSelf: 'flex-start' }}><Text style={[s.caption, { color: colors.danger }]}>{status}</Text></View>;
@@ -31,9 +31,7 @@ function StatusBadge({ status }: { status: string }) {
 }
 function IconTile({ name }: { name: IconName }) { return <View style={a.icon}><Icon name={name} size={26} /></View>; }
 function Filters<T extends string>({ values, selected, onChange }: { values: readonly T[]; selected: T; onChange: (value: T) => void }) {
-  return <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-    {values.map(value => <Pressable key={value} accessibilityRole="tab" accessibilityState={{ selected: value === selected }} onPress={() => onChange(value)} style={({ pressed }) => [a.filter, value === selected && { backgroundColor: colors.pale, borderColor: colors.teal }, pressed && { opacity: 0.75 }]}><Text style={[s.link, { color: value === selected ? colors.teal : colors.muted }]}>{value}</Text></Pressable>)}
-  </ScrollView>;
+  return <FilterChips options={values.map(value => ({ value, label: value }))} selected={selected} onSelect={onChange} accessibilityLabel="Filter records by status" />;
 }
 function RecordSearch({ value, onChange, placeholder }: { value: string; onChange: (value: string) => void; placeholder: string }) {
   return <View style={a.search}><Icon name="search" size={22} color={colors.muted} /><TextInput accessibilityLabel={placeholder} placeholder={placeholder} placeholderTextColor={colors.muted} value={value} onChangeText={onChange} autoCorrect={false} style={s.input} />{!!value && <Pressable accessibilityRole="button" accessibilityLabel="Clear search" onPress={() => onChange('')} style={{ minHeight: 48, minWidth: 36, alignItems: 'center', justifyContent: 'center' }}><Icon name="close" size={18} color={colors.muted} /></Pressable>}</View>;
@@ -74,7 +72,7 @@ export function AdminWorkspace() {
   const pharmacyCounts = reviewCounts(pharmacies);
   const medicineCounts = reviewCounts(medicines);
   function move(next: Tab) { setNotice(''); setNotes(''); setTab(next); setDetailId(null); setMedicineId(null); setSearch(''); router.setParams({ tab: next }); }
-  function selectPharmacy(p: Pharmacy) { setNotice(''); setDetailId(p.id); setNotes(p.notes || ''); setLatitude(p.point ? String(p.point.lat) : ''); setLongitude(p.point ? String(p.point.lon) : ''); }
+  function selectPharmacy(p: Pharmacy) { setNotice(''); setDetailId(p.id); setNotes(p.notes || ''); const pin = p.submitted_point ?? p.point; setLatitude(pin ? String(pin.lat) : ''); setLongitude(pin ? String(pin.lon) : ''); }
   useEffect(() => {
     let live = true;
     setLoading(true); setLoadError('');
@@ -119,6 +117,16 @@ export function AdminWorkspace() {
     try { const updated = pharmacyRow(await api.adminSetPharmacyLocation(detail.id, { latitude: lat, longitude: lon })); setPharmacies(prev => prev.map(p => p.id === detail.id ? updated : p)); setNotice('Verified pharmacy map location saved.'); }
     catch (error) { failure(error); } finally { setBusy(false); }
   }
+  function removePharmacy() {
+    if (!detail || busy) return;
+    const target = detail;
+    setConfirmation({ title: 'Remove pharmacy?', body: `${target.name} will be removed from the customer catalog and admin list. Its history and order records will be retained.`, run: async () => {
+      await api.adminRemovePharmacy(target.id, target.version);
+      setPharmacies(prev => prev.filter(p => p.id !== target.id));
+      setMedicines(prev => prev.filter(m => m.pharmacy_id !== target.id));
+      setDetailId(null); setNotice(`${target.name} removed.`);
+    } });
+  }
   function updateMedicine(status: 'Approved' | 'Rejected') {
     if (!medicine || busy) return;
     try {
@@ -133,7 +141,7 @@ export function AdminWorkspace() {
   const back = () => { setDetailId(null); setMedicineId(null); setNotice(''); setNotes(''); };
   const title = detail ? 'Application details' : medicine ? 'Medicine request' : tab === 'dashboard' ? 'Dashboard' : tab === 'pharmacies' ? 'Pharmacy applications' : tab === 'catalog' ? 'Medicine submissions' : 'Admin profile';
   const refresh = () => { if (!busy) setRefreshKey(value => value + 1); };
-  if (tab === 'riders') return <Page><Text accessibilityRole="header" style={s.title}>Rider applications</Text><AdminRiders refreshKey={refreshKey} /></Page>;
+  if (tab === 'riders') return <Page sectionGap={20}><View style={s.between}><Text accessibilityRole="header" style={s.title}>Rider applications</Text><TextLink title="Refresh" icon="refresh" onPress={refresh} /></View><AdminRiders refreshKey={refreshKey} /></Page>;
   return <>
     <Page scrollKey={`admin-${detail?.id ?? medicine?.id ?? tab}`}>
       <View style={[s.between, { alignItems: 'flex-start' }]}>
@@ -165,9 +173,10 @@ export function AdminWorkspace() {
         {detail && <>
           <Card><View style={[a.row, { alignItems: 'flex-start' }]}><IconTile name="pharmacy" /><View style={a.stack}><Text style={s.heading}>{detail.name}</Text><Text style={s.muted}>{detail.address}</Text><Text style={s.caption}>Submitted {detail.date}</Text></View><StatusBadge status={detail.status} /></View></Card>
           <Card><Text style={s.heading}>Pharmacy information</Text>{[['Application ID', detail.id], ['Applicant', detail.applicant], ['Email', detail.email], ['Contact numbers', detail.contact_numbers?.join(', ') || detail.phone || 'Not provided'], ['Opening hours', detail.hours || 'Not provided']].map(([label, value]) => <DetailRow key={label} label={label} value={value} />)}</Card>
-          <Card><Text style={s.heading}>Map location</Text><Text style={s.muted}>{detail.point ? 'A verified pin is shown to customers.' : 'Set and verify this branch pin before customers rely on its map location.'}</Text><View style={a.row}><View style={{ flex: 1 }}><CheckoutField label="Latitude" value={latitude} onChangeText={setLatitude} keyboardType="decimal-pad" editable={!busy} placeholder="e.g. 8.4772" /></View><View style={{ flex: 1 }}><CheckoutField label="Longitude" value={longitude} onChangeText={setLongitude} keyboardType="decimal-pad" editable={!busy} placeholder="e.g. 124.6470" /></View></View><Button title={detail.point ? 'Update verified pin' : 'Verify map pin'} secondary icon="map-pin" disabled={busy} onPress={() => void savePharmacyLocation()} /></Card>
+          <Card><Text style={s.heading}>Map location</Text><Text style={s.muted}>{detail.point ? 'A verified pin is shown to customers.' : 'Verify the submitted pin against the branch address before publishing it.'}</Text>{detail.submitted_point && <AreaMap area={detail.address} point={detail.submitted_point} caption={detail.point ? 'Verified branch pin' : 'Submitted branch pin'} />}<View style={a.row}><View style={{ flex: 1 }}><CheckoutField label="Latitude" value={latitude} onChangeText={setLatitude} keyboardType="decimal-pad" editable={!busy} /></View><View style={{ flex: 1 }}><CheckoutField label="Longitude" value={longitude} onChangeText={setLongitude} keyboardType="decimal-pad" editable={!busy} /></View></View><Button title={detail.point ? 'Update verified pin' : 'Verify map pin'} secondary icon="map-pin" disabled={busy} onPress={() => void savePharmacyLocation()} /></Card>
           <Card><Text style={s.heading}>Supporting documents</Text>{detail.documents.map(document => <View key={document.id} style={[s.between, { paddingVertical: 8, borderBottomWidth: 1, borderColor: colors.line }]}><View style={[a.row, { flex: 1 }]}><Icon name="prescription" size={22} color={colors.muted} /><Text style={[s.text, { flex: 1 }]}>{document.name}</Text></View><Button title="Download" secondary disabled={busy} onPress={() => void openDocument(document)} /></View>)}{!detail.documents.length && <Text style={s.muted}>No documents attached.</Text>}<Text style={s.muted}>Review the FDA license, business permit, and pharmacist credentials before approval.</Text></Card>
           {['Pending', 'Needs Info'].includes(detail.status) ? <Card><Text style={s.heading}>Review application</Text><CheckoutField label="Review notes" multiline value={notes} onChangeText={setNotes} maxLength={1000} editable={!busy} style={{ minHeight: 120 }} placeholder="Enter findings or information needed" /><Text style={s.muted}>A reason is required for rejection or information requests.</Text><Button title="Approve pharmacy" icon="pharmacy" disabled={busy} onPress={() => updatePharmacy('Approved')} /><View style={s.row}><View style={{ flex: 1, minWidth: 130 }}><Button title="Request information" secondary disabled={busy} onPress={() => updatePharmacy('Needs Info')} /></View><View style={{ flex: 1, minWidth: 130 }}><Button title="Reject application" secondary disabled={busy} onPress={() => updatePharmacy('Rejected')} /></View></View></Card> : null}
+          <Card><Button title="Remove pharmacy" secondary disabled={busy} onPress={removePharmacy} /></Card>
           <History events={detail.history} />
         </>}
         {tab === 'catalog' && !medicine && <>
@@ -181,8 +190,8 @@ export function AdminWorkspace() {
           <History events={medicine.history} />
         </>}
         {tab === 'profile' && <>
-          <Card><View style={a.row}><View style={{ width: 58, height: 58, borderRadius: 29, backgroundColor: colors.pale, alignItems: 'center', justifyContent: 'center' }}><Icon name="profile" size={30} /></View><View style={a.stack}><Text style={s.heading}>{profile?.fullName || 'Administrator'}</Text><Text style={s.muted}>{profile?.email}</Text></View></View><Badge text="Admin" /></Card>
-          <Card><Text style={s.heading}>Account</Text><Button title="Sign out" secondary disabled={busy} onPress={async () => { await signOut(); router.replace('/'); }} /></Card><ProfileLinks />
+          <Card><View style={a.row}><View style={{ width: 58, height: 58, borderRadius: 29, backgroundColor: colors.pale, alignItems: 'center', justifyContent: 'center' }}><Icon name="profile" size={30} /></View><View style={a.stack}><Text style={s.heading}>{profile?.fullName || 'Administrator'}</Text><Text style={s.muted}>{profile?.email}</Text></View></View><Badge text="Admin" /><Button title="Sign out" danger disabled={busy} onPress={async () => { await signOut(); router.replace('/'); }} /></Card>
+          <ProfileLinks />
         </>}
       </>}
     </Page>

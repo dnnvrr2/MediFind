@@ -1,4 +1,6 @@
-import { parsePlaces, validPoint, type Place } from '../domain/places';
+import { parsePlaces, validPoint, type MapPoint, type Place } from '../domain/places';
+import { cdoBarangayAt } from '../domain/cdo';
+import { defaultArea } from '../domain/locations';
 import { filterListedPlaces } from '../domain/listed-places';
 
 // Photon supports autocomplete; the public Nominatim service does not.
@@ -43,10 +45,32 @@ export async function searchPlaces(query: string, signal: AbortSignal): Promise<
   lastRequest = Date.now();
   const url = `${endpoint}${endpoint.includes('?') ? '&' : '?'}q=${encodeURIComponent(query.trim())}&limit=5&lang=en&bbox=124.43,8.18,124.84,8.57&lat=8.48&lon=124.65`;
   const response = await fetch(url, { signal });
-  if (!response.ok) throw new Error(response.status === 429 ? 'Location search is busy. Please wait and try again.' : 'Location search is unavailable. Try again or use a sample area.');
+  if (!response.ok) throw new Error(response.status === 429 ? 'Location search is busy. Please wait and try again.' : 'Location search is unavailable. Try again or choose a listed barangay.');
   const places = parsePlaces(await response.json());
   rememberPlaces(places);
   if (cache.size > 60) cache.delete(cache.keys().next().value!);
   cache.set(key, places);
   return places;
+}
+
+export async function lookupBranchAddress(point: MapPoint, signal: AbortSignal): Promise<string> {
+  const url = new URL(process.env.EXPO_PUBLIC_REVERSE_GEOCODER_URL || 'https://photon.komoot.io/reverse');
+  url.search = new URLSearchParams({
+    lat: String(point.lat), lon: String(point.lon), radius: '0.3', limit: '3',
+  }).toString();
+  const response = await fetch(url, { signal });
+  if (!response.ok) return '';
+  const result = await response.json() as { features?: { properties?: Record<string, unknown> }[] };
+  const barangay = cdoBarangayAt(point);
+  for (const { properties = {} } of result.features ?? []) {
+    const text = (key: string) => typeof properties[key] === 'string' ? properties[key].trim() : '';
+    const street = text('street') || (text('osm_key') === 'highway' ? text('name') : '');
+    if (!street) continue;
+    return [...new Set([
+      [text('housenumber'), street].filter(Boolean).join(' '),
+      barangay?.name || text('district'),
+      barangay ? defaultArea : text('city'),
+    ].filter(Boolean))].join(', ');
+  }
+  return '';
 }

@@ -2,18 +2,18 @@ import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import * as SecureStore from 'expo-secure-store';
 
-export type ApiCustomer = { id: number; email: string; full_name: string; phone: string; is_staff?: boolean; pharmacy_status?: string | null; is_rider?: boolean };
+export type ApiCustomer = { id: number; email: string; full_name: string; first_name?: string; last_name?: string; phone: string; is_staff?: boolean; pharmacy_status?: string | null; is_rider?: boolean };
 export type ApiSession = { customer: ApiCustomer; access: string; refresh: string };
 export type AdminEvent = { id: number; actor_email: string; previous_status: string; status: string; notes: string; created_at: string };
 export type AdminDocument = { id: number; kind: string; name: string; created_at: string; file_name?: string };
-export type AdminPharmacy = { id: string; name: string; address: string; applicant: string; email: string; phone: string; status: 'Draft' | 'Pending' | 'Needs Info' | 'Approved' | 'Rejected'; notes: string; version: number; created_at: string; documents: AdminDocument[]; history: AdminEvent[]; contact_numbers?: string[]; opening_schedule?: import('../domain/pharmacy-schedule').OpeningDay[]; hours?: string; point?: { lat: number; lon: number } | null };
+export type AdminPharmacy = { id: string; name: string; address: string; applicant: string; email: string; phone: string; status: 'Draft' | 'Pending' | 'Needs Info' | 'Approved' | 'Rejected'; notes: string; version: number; created_at: string; documents: AdminDocument[]; history: AdminEvent[]; contact_numbers?: string[]; opening_schedule?: import('../domain/pharmacy-schedule').OpeningDay[]; hours?: string; point?: { lat: number; lon: number } | null; submitted_point?: { lat: number; lon: number } | null };
 export type AdminMedicine = { id: string; name: string; description: string; generic?: string; strength?: string; form?: string; unit?: string; prescription?: boolean; pharmacy: string; pharmacy_id: string; status: 'Pending' | 'Approved' | 'Rejected'; notes: string; version: number; created_at: string; history: AdminEvent[] };
-export type PharmacyApplication = Omit<AdminPharmacy, 'status' | 'created_at'> & { status: AdminPharmacy['status'] | 'Draft'; hours: string; is_open: boolean; point?: { lat: number; lon: number } | null };
+export type PharmacyApplication = Omit<AdminPharmacy, 'status' | 'created_at'> & { status: AdminPharmacy['status'] | 'Draft'; hours: string; is_open: boolean; accepts_orders: boolean; point?: { lat: number; lon: number } | null };
 export type PharmacyInvitation = { id: string; pharmacy: string; email: string; role: 'staff' | 'pharmacist'; status: string; expires_at: string; acceptance_code?: string; requires_renewal?: boolean };
 export type PharmacySession = { application: PharmacyApplication | null; role: 'owner' | 'pharmacist' | 'staff' | null; can_review: boolean };
 export type PharmacyMedicine = AdminMedicine & { catalog_id: string; generic: string; strength: string; form: string; unit: string; prescription: boolean; inventory: null | { price: string; stock: number; reserved: number; low_stock: number; available: boolean; version: number } };
 export type PharmacyPrescription = { id: number; reference: string; customer: string; status: string; requested: { medicineId: string; quantity: number }[]; approved: { medicineId: string; quantity: number }[]; note: string; version: number; revision: number; file_name: string; reviewer: string; reviewed_at: string | null };
-export type PharmacyOrderRecord = { id: number; version: number; reservation: string; data: import('../domain/orders').DemoOrder; rider: null | { id: string; name: string; status: string } };
+export type PharmacyOrderRecord = { id: number; version: number; reservation: string; data: import('../domain/orders').Order; rider: null | { id: string; name: string; status: string } };
 export type PharmacyActivity = { id: number; action: string; target: string; note: string; actor: string; created_at: string };
 export type PublicCatalog = { medicines: import('../data/catalog').Medicine[]; pharmacies: import('../data/catalog').Pharmacy[]; offers: import('../data/catalog').Offer[] };
 export type StockImportHistory = { id: string; filename: string; rows: number; at: string; actor: string };
@@ -173,6 +173,7 @@ export const api = {
   pharmacySubmitApplication: () => request<PharmacyApplication>('/api/pharmacy/application/submit/', { method: 'POST', body: '{}' }),
   pharmacyUploadDocument: async (kind: string, file: UploadFile) => { const body = new FormData(); body.append('kind', kind); await appendUpload(body, 'file', file); return request<PharmacyApplication>('/api/pharmacy/documents/', { method: 'POST', body }); },
   pharmacySetOpen: (is_open: boolean) => request<PharmacyApplication>('/api/pharmacy/open/', { method: 'POST', body: JSON.stringify({ is_open }) }),
+  pharmacySetAcceptsOrders: (accepts_orders: boolean) => request<PharmacyApplication>('/api/pharmacy/accept-orders/', { method: 'POST', body: JSON.stringify({ accepts_orders }) }),
   pharmacyMedicines: () => request<PharmacyMedicine[]>('/api/pharmacy/medicines/'),
   pharmacyMedicineRequest: (payload: Record<string, unknown>) => request<AdminMedicine>('/api/pharmacy/medicines/', { method: 'POST', body: JSON.stringify(payload) }),
   pharmacyInventory: (id: string, payload: Record<string, unknown>) => request(`/api/pharmacy/inventory/${encodeURIComponent(id)}/`, { method: 'POST', body: JSON.stringify(payload) }),
@@ -187,6 +188,7 @@ export const api = {
   pharmacyPrescriptionFile: (id: number) => request<Blob>(`/api/pharmacy/prescriptions/${id}/file/`, {}, true, 'blob'),
   pharmacyOrders: () => request<PharmacyOrderRecord[]>('/api/pharmacy/orders/'),
   pharmacyOrderAction: (id: number, payload: Record<string, unknown>) => request<PharmacyOrderRecord>(`/api/pharmacy/orders/${id}/action/`, { method: 'POST', body: JSON.stringify(payload) }),
+  pharmacyUndoOrder: (id: number, version: number, expected_status: string) => request<PharmacyOrderRecord>(`/api/pharmacy/orders/${id}/undo/`, { method: 'POST', body: JSON.stringify({ version, expected_status }) }),
   pharmacyRiders: () => request<{ id: number; name: string; vehicle: string }[]>('/api/pharmacy/riders/'),
   pharmacyHandoff: (id: number, version: number, rider_id: number) => request<PharmacyOrderRecord>(`/api/pharmacy/orders/${id}/handoff/`, { method: 'POST', body: JSON.stringify({ version, rider_id }) }),
   pharmacyTeam: () => request<{ id: number; name: string; email: string; role: string; verified_pharmacist: boolean; active: boolean }[]>('/api/pharmacy/team/'),
@@ -195,10 +197,11 @@ export const api = {
   adminPharmacies: () => request<AdminPharmacy[]>('/api/administration/pharmacies/'),
   adminMedicines: () => request<AdminMedicine[]>('/api/administration/medicines/'),
   adminReviewPharmacy: (id: string, payload: { status: AdminPharmacy['status']; notes: string; version: number }) => request<AdminPharmacy>(`/api/administration/pharmacies/${encodeURIComponent(id)}/review/`, { method: 'POST', body: JSON.stringify(payload) }),
+  adminRemovePharmacy: (id: string, version: number) => request<void>(`/api/administration/pharmacies/${encodeURIComponent(id)}/remove/`, { method: 'DELETE', body: JSON.stringify({ version }) }),
   adminSetPharmacyLocation: (id: string, payload: { latitude: number; longitude: number }) => request<AdminPharmacy>(`/api/administration/pharmacies/${encodeURIComponent(id)}/location/`, { method: 'POST', body: JSON.stringify(payload) }),
   adminReviewMedicine: (id: string, payload: { status: AdminMedicine['status']; notes: string; version: number }) => request<AdminMedicine>(`/api/administration/medicines/${encodeURIComponent(id)}/review/`, { method: 'POST', body: JSON.stringify(payload) }),
   adminDocument: (id: number) => request<Blob>(`/api/administration/documents/${id}/`, {}, true, 'blob'),
-  register: (payload: { email: string; password: string; full_name: string; phone: string }) => request<ApiSession>('/api/auth/register/', { method: 'POST', body: JSON.stringify(payload) }, false),
+  register: (payload: { email: string; password: string; first_name: string; last_name: string; phone: string }) => request<ApiSession>('/api/auth/register/', { method: 'POST', body: JSON.stringify(payload) }, false),
   login: (payload: { email: string; password: string }) => request<ApiSession>('/api/auth/token/', { method: 'POST', body: JSON.stringify(payload) }, false),
   riderMe: () => request<Rider>('/api/rider/me/'),
   riderApplication: () => request<RiderApplicationSession>('/api/rider/application/'),
@@ -224,7 +227,7 @@ export const api = {
   },
   customerDeliveryCode: (orderRef: string) => request<{ code: string; delivery_status: string }>(`/api/customer/orders/${encodeURIComponent(orderRef)}/delivery-code/`),
   me: () => request<ApiCustomer>('/api/auth/me/'),
-  updateMe: (payload: { full_name: string; phone: string }) => request<ApiCustomer>('/api/auth/me/', { method: 'PATCH', body: JSON.stringify(payload) }),
+  updateMe: (payload: { first_name: string; last_name: string; phone: string }) => request<ApiCustomer>('/api/auth/me/', { method: 'PATCH', body: JSON.stringify(payload) }),
   logout: async () => { const version = sessionVersion; const token = refreshToken; if (token) await request<void>('/api/auth/logout/', { method: 'POST', body: JSON.stringify({ refresh: token }) }, false).catch(() => undefined); await clearSession(version); },
   restoreSession,
   requestPasswordReset: (email: string) => request<{ detail: string }>('/api/auth/password-reset/', { method: 'POST', body: JSON.stringify({ email }) }, false),

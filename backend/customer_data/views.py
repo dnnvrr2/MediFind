@@ -2,6 +2,7 @@ from pathlib import Path
 import json
 from django.http import FileResponse
 from django.db import transaction
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, permissions, status
 from rest_framework.exceptions import ValidationError
@@ -19,6 +20,10 @@ class OwnerCollectionMixin:
 class OrderListCreateView(OwnerCollectionMixin, generics.ListCreateAPIView):
     model = CustomerOrder
     serializer_class = CustomerOrderSerializer
+
+    def get_queryset(self):
+        return super().get_queryset().exclude(external_id__startswith="DEMO-", pharmacy_order__isnull=True)
+
     def list(self, request, *args, **kwargs):
         response = super().list(request, *args, **kwargs)
         from riders.models import RiderDelivery
@@ -56,19 +61,19 @@ class OrderListCreateView(OwnerCollectionMixin, generics.ListCreateAPIView):
                 order_action(managed, request.user, "cancelled", "Cancelled by customer.")
                 existing.refresh_from_db()
             return Response(self.get_serializer(existing).data)
-        managed_order = create_order(request.user, external_id, submitted)
-        if managed_order:
-            return Response(self.get_serializer(managed_order).data, status=201)
-        if not isinstance(submitted, dict):
-            raise ValidationError("Expected order details.")
-        submitted.pop("managed", None)
-        obj, created = CustomerOrder.objects.update_or_create(owner=request.user, external_id=external_id, defaults={"data": submitted})
-        return Response(self.get_serializer(obj).data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+        if existing:
+            raise ValidationError("This order reference is no longer available.")
+        order = create_order(request.user, external_id, submitted)
+        return Response(self.get_serializer(order).data, status=status.HTTP_201_CREATED)
 
 class PrescriptionListCreateView(OwnerCollectionMixin, generics.ListCreateAPIView):
     model = CustomerPrescription
     serializer_class = CustomerPrescriptionSerializer
     parser_classes = [JSONParser, MultiPartParser, FormParser]
+
+    def get_queryset(self):
+        return super().get_queryset().filter(Q(pharmacy_review__isnull=False) | Q(data__status="draft"))
+
     @transaction.atomic
     def create(self, request, *args, **kwargs):
         external_id = str(request.data.get("external_id", "")).strip()

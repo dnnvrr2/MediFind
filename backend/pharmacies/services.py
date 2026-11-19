@@ -14,7 +14,7 @@ from .models import PharmacyMember, Inventory, PrescriptionReview, PharmacyOrder
 
 
 def member_for(user, approved=True):
-    member = PharmacyMember.objects.select_related("pharmacy", "user").filter(user=user, active=True).first()
+    member = PharmacyMember.objects.select_related("pharmacy", "user").filter(user=user, active=True).exclude(pharmacy__status="Archived").first()
     if not member or (approved and member.pharmacy.status != "Approved"):
         raise PermissionDenied("An approved pharmacy membership is required.")
     return member
@@ -34,7 +34,7 @@ def medicine_data(m):
 
 
 def pharmacy_data(p):
-    return {"id": str(p.pk), "name": p.name, "address": p.address, "phone": p.phone, "contactNumbers": p.contact_numbers or ([p.phone] if p.phone else []), "hours": p.hours or "Confirm hours with the pharmacy", "live": True, "isOpen": p.is_open, "point": {"lat": float(p.latitude), "lon": float(p.longitude)} if p.location_verified and p.latitude is not None and p.longitude is not None else None}
+    return {"id": str(p.pk), "name": p.name, "address": p.address, "phone": p.phone, "contactNumbers": p.contact_numbers or ([p.phone] if p.phone else []), "hours": p.hours or "Confirm hours with the pharmacy", "live": True, "isOpen": p.is_open, "acceptsOrders": p.accepts_orders, "point": {"lat": float(p.latitude), "lon": float(p.longitude)} if p.location_verified and p.latitude is not None and p.longitude is not None else None}
 
 
 def inventory_rows(pharmacy, lock=False):
@@ -73,14 +73,18 @@ def save_prescription(record, data, upload, user):
     existing = PrescriptionReview.objects.select_for_update().filter(prescription=record).first()
     pharmacy = live_pharmacy(data.get("pharmacyId"))
     if not pharmacy and not existing:
-        data.pop("managed", None)
-        return data
+        if data.get("pharmacyId") or data.get("status") != "draft":
+            raise ValidationError("Choose an approved pharmacy for prescription review.")
+        if not upload and not record.file:
+            raise ValidationError("Attach a prescription file.")
+        revision = integer(data.get("revision", 1), "Revision")
+        return {**data, "revision": revision, "managed": False, "approved": [], "note": ""}
     if existing and not pharmacy:
         raise ValidationError("Replace the file and retain the assigned pharmacy to begin another review.")
     revision = integer(data.get("revision", 1), "Revision")
     if existing and revision < existing.revision:
         raise Conflict("Refresh this prescription before editing it.")
-    if existing and existing.pharmacy_id != pharmacy.pk:
+    if existing and existing.pharmacy_id != pharmacy.pk and (existing.status != "draft" or existing.revision != 1):
         raise ValidationError("Submit a separate prescription to change pharmacies.")
     if existing and revision == existing.revision and existing.status != "draft":
         # A customer may retry a sync; server review outcomes must survive it.
@@ -98,6 +102,8 @@ def save_prescription(record, data, upload, user):
         raise ValidationError("Attach a prescription file before submitting.")
     data = {**data, "approved": [], "note": "", "managed": True}
     if state == "pending":
+        if not pharmacy.is_open:
+            raise ValidationError("Choose an open pharmacy.")
         data.setdefault("requested", [])
         if not isinstance(data.get("requested", []), list) or not 0 <= len(data["requested"]) <= 100 or any(not isinstance(line, dict) for line in data["requested"]):
             raise ValidationError("Use a valid list of requested medicines.")
@@ -136,9 +142,7 @@ def create_order(user, external_id, submitted):
         raise ValidationError("Choose a pharmacy.")
     pharmacy = live_pharmacy(submitted["pharmacy"].get("id"))
     if not pharmacy:
-        if any(str((line.get("medicine") or {}).get("id", "")).startswith("catalog-") for line in submitted.get("lines", []) if isinstance(line, dict)):
-            raise ValidationError("Pharmacy catalog items require their approved pharmacy.")
-        return None
+        raise ValidationError("Choose an approved pharmacy.")
     with transaction.atomic():
         user.__class__.objects.select_for_update().get(pk=user.pk)
         pharmacy = PharmacyApplication.objects.select_for_update().get(pk=pharmacy.pk)
@@ -148,7 +152,7 @@ def create_order(user, external_id, submitted):
         existing = CustomerOrder.objects.filter(owner=user, submission_key=submission_key).first() or CustomerOrder.objects.filter(owner=user, external_id=external_id).first()
         if existing:
             return ensure_same_order(existing, submitted)
-        if pharmacy.status != "Approved" or not pharmacy.is_open:
+        if pharmacy.status != "Approved" or not pharmacy.accepts_orders:
             raise ValidationError("This pharmacy is currently closed to orders.")
         offers = inventory_lookup(pharmacy, lock=True)
         lines = submitted.get("lines")
@@ -193,7 +197,7 @@ def create_order(user, external_id, submitted):
             normalized.append({"medicine": medicine_data(row.medicine), "quantity": qty, "unitPrice": float(row.price), "subtotal": float(cost), **({"approval": {"prescriptionId": rx.prescription.external_id, "revision": rx.revision, "pharmacyId": str(pharmacy.pk), "medicineId": mid, "quantity": qty, "reviewedAt": int(rx.reviewed_at.timestamp() * 1000)}} if rx else {})})
             allocations.append((row, qty, rx, revision))
         at = int(timezone.now().timestamp() * 1000)
-        # Delivery fee stays explicitly a local prototype estimate.
+        # Use the same delivery fee as the checkout quote.
         fee = Decimal("50") if method == "delivery" else Decimal("0")
         data = {"id": external_id, "submissionKey": submitted.get("submissionKey", external_id), "managed": True, "createdAt": at, "updatedAt": at, "status": "awaiting_confirmation", "method": method, "pharmacy": pharmacy_data(pharmacy), "lines": normalized, "recipient": recipient, "address": address if method == "delivery" else None, "subtotal": float(total), "deliveryFee": float(fee), "total": float(total + fee), "payment": "Cash on delivery" if method == "delivery" else "Pay at pickup", "events": [{"status": "awaiting_confirmation", "at": at, "note": "Submitted to the pharmacy."}]}
         order = CustomerOrder.objects.create(owner=user, external_id=external_id, submission_key=submission_key, data=data)
@@ -250,12 +254,47 @@ def order_action(managed, user, status, note="", version=None):
         return managed
 
 
+def undo_order_action(managed, user, expected_status, version):
+    with transaction.atomic():
+        managed = PharmacyOrder.objects.select_for_update().select_related("order", "pharmacy").get(pk=managed.pk)
+        if managed.version != version:
+            raise Conflict()
+        data = copy.deepcopy(managed.order.data)
+        events = data.get("events", [])
+        previous = events[-2].get("status") if len(events) >= 2 else None
+        if data.get("status") != expected_status or not events or events[-1].get("status") != expected_status:
+            raise Conflict("This order changed after that update, so it cannot be undone.")
+        reversible = {
+            "confirmed": "awaiting_confirmation",
+            "preparing": "confirmed",
+            "ready_for_pickup": "preparing",
+            "ready_for_collection": "preparing",
+        }
+        if reversible.get(expected_status) != previous:
+            raise Conflict("Only the latest reversible pharmacy progress update can be undone.")
+        if expected_status == "ready_for_collection" and managed.order.rider_deliveries.exclude(status__in=("declined", "cancelled")).exists():
+            raise Conflict("A rider has already been assigned. This update cannot be undone.")
+        if expected_status == "confirmed":
+            if managed.reservation != "held":
+                raise Conflict("The stock reservation has changed. This update cannot be undone.")
+            release_or_consume(managed)
+        events.pop()
+        data["status"] = previous
+        data["updatedAt"] = int(timezone.now().timestamp() * 1000)
+        managed.order.data = data
+        managed.order.save(update_fields=["data", "updated_at"])
+        managed.version += 1
+        managed.save(update_fields=["version", "reservation"])
+        audit(managed.pharmacy, user, "Order progress undone", managed.order.external_id, f"{expected_status} -> {previous}")
+        return managed
+
+
 def assign_rider(order, rider, actor, expected_version=None):
     from riders.models import RiderDelivery, RiderProfile, DeliveryEvent
     with transaction.atomic():
         managed = PharmacyOrder.objects.select_for_update().select_related("order", "pharmacy").filter(order=order).first()
         if not managed:
-            raise ValidationError("Only pharmacy-managed orders can be dispatched. Sample orders are previews.")
+            raise ValidationError("Only pharmacy-managed orders can be dispatched.")
         if expected_version is not None and managed.version != expected_version:
             raise Conflict()
         data = managed.order.data

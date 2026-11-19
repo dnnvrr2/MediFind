@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type PropsWithChildren } from 'react';
 import { api, sessionGeneration } from '../api/client';
-import { fileIssue, submitPrescription, reviewPrescription, replacePrescription, type Prescription, type PrescriptionFile, type PrescriptionResult, type RequestLine } from '../domain/prescriptions';
+import { fileIssue, submitPrescription, replacePrescription, type Prescription, type PrescriptionFile, type PrescriptionResult, type RequestLine } from '../domain/prescriptions';
 import { mergePendingRecords } from '../domain/prescription-sync';
 import { useProfile } from './profile';
 
@@ -13,7 +13,6 @@ type ContextValue = {
   create: (file: PrescriptionFile) => PrescriptionResult;
   edit: (id: string, requested: RequestLine[], pharmacyId: string) => PrescriptionResult;
   submit: (id: string, requested: RequestLine[], pharmacyId: string) => PrescriptionResult;
-  review: (id: string, outcome: 'approved' | 'partially_approved' | 'rejected' | 'needs_clearer_photo', lines: RequestLine[], note: string) => PrescriptionResult;
   replace: (id: string, file: PrescriptionFile) => PrescriptionResult;
 };
 type RemotePrescription = { external_id: string; data: string | Prescription; file_url: string | null; original_filename: string };
@@ -109,7 +108,6 @@ export function PrescriptionsProvider({ children }: PropsWithChildren) {
     },
     edit: (id, requested, pharmacyId) => update(id, record => record.status === 'draft' ? { ok: true, record: { ...record, requested, pharmacyId } } : { ok: false, issue: 'This request has already been submitted.' }),
     submit: (id, requested, pharmacyId) => update(id, record => submitPrescription({ ...record, requested, pharmacyId }, Date.now())),
-    review: (id, outcome, lines, note) => update(id, record => reviewPrescription(record, outcome, lines, note, Date.now())),
     replace: (id, file) => update(id, record => replacePrescription(record, file, Date.now())),
   }}>{children}</Context.Provider>;
 }

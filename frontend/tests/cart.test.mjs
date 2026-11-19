@@ -1,3 +1,4 @@
+import './catalog-fixture.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { addItem, changeQuantity, cartTotal } from '../src/domain/cart.ts';

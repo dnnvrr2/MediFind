@@ -1,5 +1,5 @@
 import { View } from 'react-native';
-import { statusInfo, type DemoOrder, type OrderStatus } from '../domain/orders';
+import { statusInfo, type Order, type OrderStatus } from '../domain/orders';
 import { Text, colors, s } from './ui';
 import { Icon } from './icon';
 
@@ -10,12 +10,12 @@ export function OrderStatusBadge({ status }: { status: OrderStatus }) {
   return <View style={{ backgroundColor: bg, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6, alignSelf: 'flex-start', maxWidth: '100%' }}><Text style={{ color, fontSize: 12, lineHeight: 18, fontWeight: '600' }}>{info.label}</Text></View>;
 }
 
-export function OrderStatusPanel({ order }: { order: DemoOrder }) {
+export function OrderStatusPanel({ order }: { order: Order }) {
   const info = statusInfo[order.status];
   const note = order.events[order.events.length - 1]?.note;
   return <View style={{ borderWidth: 1, borderColor: colors.line, borderRadius: 10, padding: 16, backgroundColor: colors.white, gap: 12 }}>
     <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}><Icon name={info.tone === 'danger' ? 'alert' : order.status === 'delivered' || order.status === 'collected' ? 'check' : 'clock'} color={info.tone === 'danger' ? colors.danger : colors.teal} /><OrderStatusBadge status={order.status} /></View>
-    <Text style={s.text}>{order.managed ? (order.status === 'awaiting_confirmation' ? 'Waiting for the pharmacy to accept.' : order.status === 'ready_for_collection' ? 'The pharmacy is arranging rider collection.' : ['delivery_issue', 'delivery_retry', 'returning', 'returned', 'rider_collected'].includes(order.status) ? info.description : 'Updated by the pharmacy or assigned rider.') : info.description}</Text>
+    <Text style={s.text}>{info.description}</Text>
     {['cancelled', 'rejected', 'delivery_failed', 'delivery_issue', 'delivery_retry', 'returning', 'returned'].includes(order.status) && !!note && <Text style={s.muted}>Reason: {note}</Text>}
   </View>;
 }

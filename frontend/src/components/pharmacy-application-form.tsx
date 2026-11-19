@@ -4,14 +4,18 @@ import * as DocumentPicker from 'expo-document-picker';
 import { api, type PharmacyApplication, type UploadFile } from '../api/client';
 import { useProfile } from '../state/profile';
 import { Badge, Button, Card, Text, colors, s } from './ui';
-import { CheckoutField } from './checkout-field';
+import { CheckoutField, RequiredMark } from './checkout-field';
 import { PharmacyBranchDetailsFields, usePharmacyBranchDetails } from './pharmacy-branch-details';
+import { BranchAddressPicker } from './branch-address-picker';
+import type { MapPoint } from '../domain/places';
 import { PrivateDocument } from './private-document';
 import { applicationErrors, documentKinds, documentLabels, type ApplicationValues } from '../domain/pharmacy-application';
 
 export function PharmacyApplicationForm({ app, onSaved, editable = true }: { app: PharmacyApplication | null; editable?: boolean; onSaved: (app: PharmacyApplication) => void }) {
   const { profile, refreshProfile } = useProfile();
   const [values, setValues] = useState<ApplicationValues>({ name: app?.name || '', address: app?.address || '', applicant: app?.applicant || profile?.fullName || '', email: app?.email || profile?.email || '', phone: app?.phone || profile?.phone || '', hours: app?.hours || '' });
+  const [branchPin, setBranchPin] = useState<MapPoint | null>(app?.submitted_point ?? app?.point ?? null);
+  const [pinPickerOpen, setPinPickerOpen] = useState(false);
   const details = usePharmacyBranchDetails(app, profile?.phone);
   const effectiveValues = { ...values, phone: details.phone, hours: details.hours };
   const [files, setFiles] = useState<Partial<Record<typeof documentKinds[number], UploadFile>>>({});
@@ -25,6 +29,7 @@ export function PharmacyApplicationForm({ app, onSaved, editable = true }: { app
   const [issue, setIssue] = useState('');
   const wide = useWindowDimensions().width >= 760;
   const errors = applicationErrors(effectiveValues, submitting);
+  const pinIssue = branchPin ? '' : 'Place a pin and confirm the branch address.';
   const complete = documentKinds.every(kind => files[kind] || app?.documents.some(doc => doc.kind === kind));
   async function choose(kind: typeof documentKinds[number]) {
     setIssue('');
@@ -41,11 +46,12 @@ export function PharmacyApplicationForm({ app, onSaved, editable = true }: { app
   async function persist(submit: boolean) {
     if (working.current) return;
     setAttempted(true); setSubmitting(submit); setIssue(''); setMessage('');
+    if (pinIssue) { setIssue(pinIssue); return; }
     if (Object.keys(applicationErrors(effectiveValues, submit)).length || details.contactIssue(submit) || details.hoursIssue) { setIssue(details.contactIssue(submit) || details.hoursIssue || 'Check the highlighted fields.'); return; }
     if (submit && !complete) { setIssue('Attach all three required documents.'); return; }
     working.current = true; setBusy(true);
     try {
-      let current = await api.pharmacyApplication({ ...Object.fromEntries(Object.entries(effectiveValues).map(([key, value]) => [key, value.trim()])), ...details.payload }, !!savedApplication.current);
+      let current = await api.pharmacyApplication({ ...Object.fromEntries(Object.entries(effectiveValues).map(([key, value]) => [key, value.trim()])), ...details.payload, latitude: branchPin?.lat, longitude: branchPin?.lon }, !!savedApplication.current);
       savedApplication.current = current; onSaved(current);
       for (const kind of documentKinds) {
         const file = files[kind];
@@ -62,20 +68,24 @@ export function PharmacyApplicationForm({ app, onSaved, editable = true }: { app
     finally { working.current = false; setBusy(false); }
   }
   return <View style={{ gap: 20 }}>
-    <Card><Text style={s.heading}>Branch details</Text><Text style={s.muted}>{editable ? 'Fields marked * are required for submission.' : 'Submitted branch details.'}</Text>
+    <Card><Text style={s.heading}>Branch details</Text>
       <View style={{ flexDirection: wide ? 'row' : 'column', flexWrap: 'wrap', gap: 18 }}>
-        {(['name', 'applicant', 'email', 'address'] as const).map(key => <View key={key} style={{ width: wide && key !== 'address' ? '48%' : '100%', flexGrow: 1 }}>
-          <CheckoutField label={{ name: 'Pharmacy / branch name *', applicant: 'Owner / authorized representative *', email: 'Branch email *', phone: 'Contact number *', address: 'Full branch address *', hours: 'Opening hours *' }[key]}
-            placeholder={{ name: 'Registered pharmacy and branch name', applicant: 'Full name', email: 'pharmacy@example.com', phone: '09XXXXXXXXX', address: 'Building, street, barangay, Cagayan de Oro City', hours: 'e.g. Monday to Saturday, 8 AM - 8 PM' }[key]}
+        {(['name', 'applicant', 'email'] as const).map(key => <View key={key} style={{ width: wide ? '48%' : '100%', flexGrow: 1 }}>
+          <CheckoutField label={{ name: 'Pharmacy / branch name', applicant: 'Owner / authorized representative', email: 'Branch email' }[key]} required={editable}
             value={values[key]} onChangeText={value => setValues(previous => ({ ...previous, [key]: value }))} error={editable && attempted ? errors[key] : undefined}
-            maxLength={key === 'address' ? 500 : 150} multiline={key === 'address'} keyboardType={key === 'email' ? 'email-address' : 'default'} autoCapitalize={key === 'email' ? 'none' : 'sentences'} editable={editable && !busy} />
+            maxLength={150} keyboardType={key === 'email' ? 'email-address' : 'default'} autoCapitalize={key === 'email' ? 'none' : 'sentences'} editable={editable && !busy} />
         </View>)}
+      </View>
+      <View style={{ gap: 8 }}>
+        <Text style={s.text} accessibilityLabel={editable ? 'Full branch address, required' : undefined}>Full branch address{editable && <RequiredMark />}</Text>
+        {!!values.address && <Text style={s.muted}>{values.address}</Text>}
+        {editable && <Button title={branchPin ? 'Change location' : 'Pin branch on map'} secondary icon="map-pin" disabled={busy} onPress={() => setPinPickerOpen(true)} />}
       </View>
     </Card>
     <Card><PharmacyBranchDetailsFields details={details} disabled={busy} readOnly={!editable} attempted={attempted} /></Card>
     <Card><Text style={s.heading}>Supporting documents</Text><Text style={s.muted}>PDF, PNG, or JPEG. Up to 10 MB per file. Files are private and available to authorized reviewers.</Text>
       {documentKinds.map(kind => { const file = files[kind]; const document = app?.documents.find(doc => doc.kind === kind); return <View key={kind} style={{ gap: 10, paddingVertical: 12, borderBottomWidth: 1, borderColor: colors.line }}>
-        <View style={s.between}><Text style={s.heading}>{documentLabels[kind]} *</Text><Badge text={file ? 'Selected' : document ? 'Uploaded' : 'Required'} neutral={!file && !document} /></View>
+        <View style={s.between}><Text style={s.heading} accessibilityLabel={editable ? documentLabels[kind] + ', required' : undefined}>{documentLabels[kind]}{editable && <RequiredMark />}</Text>{(file || document) && <Badge text={file ? 'Selected' : 'Uploaded'} />}</View>
         <Text style={s.muted}>{{ FDA: 'Current license to operate for this branch.', Business: 'Current permit matching the pharmacy business.', Pharmacist: 'Credentials of the pharmacist responsible for this branch.' }[kind]}</Text>
         {file && <Text style={s.text}>{file.name}</Text>}
         {document && !file && <PrivateDocument name={document.file_name || document.name} load={() => api.pharmacyDocument(document.id)} title="View uploaded file" />}
@@ -83,6 +93,12 @@ export function PharmacyApplicationForm({ app, onSaved, editable = true }: { app
         {file && <Button title="Remove selected file" secondary disabled={busy} onPress={() => setFiles(previous => { const next = { ...previous }; delete next[kind]; return next; })} />}
       </View>; })}
     </Card>
+    {pinPickerOpen && <BranchAddressPicker initialPin={branchPin} initialAddress={values.address} onCancel={() => setPinPickerOpen(false)} onConfirm={(pin, address) => {
+      setBranchPin(pin);
+      setValues(previous => ({ ...previous, address }));
+      setPinPickerOpen(false);
+      setIssue('');
+    }} />}
     {editable && <Card><Text style={s.heading}>Save or submit</Text><Text style={s.muted}>Save your progress at any time. Submit when all details and documents are ready for admin review.</Text>
       {!!issue && <Text accessibilityRole="alert" style={{ color: colors.danger }}>{issue}</Text>}{!!message && <Text accessibilityLiveRegion="polite" style={s.muted}>{message}</Text>}
       <Button title={busy ? 'Saving...' : 'Save changes'} secondary disabled={busy} onPress={() => void persist(false)} />

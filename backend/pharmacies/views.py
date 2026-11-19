@@ -11,6 +11,7 @@ from django.db.models import F
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from rest_framework.throttling import AnonRateThrottle
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -20,8 +21,8 @@ from administration.serializers import MedicineSerializer
 from administration.views import Conflict
 from riders.models import RiderProfile, RiderDelivery, DeliveryEvent
 from .models import PharmacyMember, Inventory, PrescriptionReview, PharmacyOrder, PharmacyInvitation
-from .serializers import ApplicationInput, MedicineInput, InventoryInput, DecisionInput, application_data, audit_data
-from .services import member_for, audit, public_id, medicine_data, pharmacy_data, inventory_rows, inventory_lookup, integer, order_action
+from .serializers import ApplicationInput, MedicineInput, InventoryInput, DecisionInput, UndoOrderInput, application_data, audit_data
+from .services import member_for, audit, public_id, medicine_data, pharmacy_data, inventory_rows, inventory_lookup, integer, order_action, undo_order_action
 
 
 class PharmacyView(APIView):
@@ -30,7 +31,7 @@ class PharmacyView(APIView):
 
 class MeView(PharmacyView):
     def get(self, request):
-        member = PharmacyMember.objects.select_related("pharmacy").filter(user=request.user, active=True).first()
+        member = PharmacyMember.objects.select_related("pharmacy").filter(user=request.user, active=True).exclude(pharmacy__status="Archived").first()
         if not member:
             return Response({"application": None, "role": None, "can_review": False})
         return Response({"application": application_data(member.pharmacy), "role": member.role, "can_review": member.verified_pharmacist and member.pharmacy.status == "Approved"})
@@ -79,6 +80,8 @@ class SubmitApplicationView(PharmacyView):
             raise ValidationError("Attach all three required documents before submission.")
         if any(not document.file or not document.file.storage.exists(document.file.name) for document in app.documents.all()):
             raise ValidationError("A document is missing. Replace it before submission.")
+        if app.latitude is None or app.longitude is None:
+            raise ValidationError({"address": "Place a map pin and confirm your branch address before submitting."})
         before = app.status
         app.status = "Pending"
         app.version += 1
@@ -123,10 +126,24 @@ class OpenView(PharmacyView):
         return Response(application_data(member.pharmacy))
 
 
+class AcceptOrdersView(PharmacyView):
+    def post(self, request):
+        member = member_for(request.user)
+        if member.role not in ("owner", "pharmacist"):
+            raise PermissionDenied("Only an owner or pharmacist can change order acceptance.")
+        value = request.data.get("accepts_orders")
+        if not isinstance(value, bool):
+            raise ValidationError("Order acceptance must be true or false.")
+        member.pharmacy.accepts_orders = value
+        member.pharmacy.save(update_fields=["accepts_orders", "updated_at"])
+        audit(member.pharmacy, request.user, "Orders enabled" if value else "Orders paused")
+        return Response(application_data(member.pharmacy))
+
+
 class MedicinesView(PharmacyView):
     def get(self, request):
         member = member_for(request.user)
-        records = MedicineRequest.objects.filter(pharmacy=member.pharmacy).prefetch_related("history").select_related("pharmacy")
+        records = MedicineRequest.objects.filter(pharmacy=member.pharmacy).exclude(status="Archived").prefetch_related("history").select_related("pharmacy")
         rows = []
         for m in records:
             data = dict(MedicineSerializer(m).data)
@@ -144,7 +161,7 @@ class MedicinesView(PharmacyView):
         description = (values["strength"] + " - " + values["form"])[:150]
         medicine_id = request.data.get("id")
         if medicine_id:
-            m = get_object_or_404(MedicineRequest.objects.select_for_update(), pk=medicine_id, pharmacy=member.pharmacy)
+            m = get_object_or_404(MedicineRequest.objects.select_for_update().exclude(status="Archived"), pk=medicine_id, pharmacy=member.pharmacy)
             if m.status == "Approved":
                 raise Conflict("Approved product details cannot be changed. Request another formulation instead.")
             for key, value in values.items():
@@ -286,6 +303,16 @@ class OrderActionView(PharmacyView):
         return Response(order_data(row))
 
 
+class UndoOrderActionView(PharmacyView):
+    def post(self, request, pk):
+        member = member_for(request.user)
+        row = get_object_or_404(PharmacyOrder, pk=pk, pharmacy=member.pharmacy)
+        payload = UndoOrderInput(data=request.data)
+        payload.is_valid(raise_exception=True)
+        row = undo_order_action(row, request.user, payload.validated_data["expected_status"], payload.validated_data["version"])
+        return Response(order_data(row))
+
+
 class RidersView(PharmacyView):
     def get(self, request):
         member_for(request.user)
@@ -317,7 +344,12 @@ class ActivityView(PharmacyView):
         return Response(rows)
 
 
+class CatalogThrottle(AnonRateThrottle):
+    scope = "catalog"
+
+
 class PublicCatalogView(APIView):
+    throttle_classes = (CatalogThrottle,)
     permission_classes = (AllowAny,)
     authentication_classes = ()
     def get(self, request):
@@ -330,7 +362,7 @@ class PublicCatalogView(APIView):
                 continue
             mid = public_id(m)
             medicines[mid], pharmacies[str(p.pk)] = medicine_data(m), pharmacy_data(p)
-            offers.append({"medicineId": mid, "pharmacyId": str(p.pk), "price": float(row.price), "stock": row.stock - row.reserved if row.available and p.is_open else 0})
+            offers.append({"medicineId": mid, "pharmacyId": str(p.pk), "price": float(row.price), "stock": row.stock - row.reserved if row.available else 0})
         return Response({"medicines": list(medicines.values()), "pharmacies": list(pharmacies.values()), "offers": offers})
 
 

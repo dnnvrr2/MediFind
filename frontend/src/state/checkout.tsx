@@ -1,12 +1,23 @@
-import { createContext, useContext, useState, type Dispatch, type SetStateAction, type PropsWithChildren } from 'react';
+import { createContext, useContext, useState, type PropsWithChildren } from 'react';
 import { initialCheckout, type CheckoutDraft } from '../domain/checkout';
+import { useProfile } from './profile';
 
-const Context = createContext<{ draft: CheckoutDraft; setDraft: Dispatch<SetStateAction<CheckoutDraft>> } | null>(null);
+const Context = createContext<{ draft: CheckoutDraft; updateDraft: (changes: Partial<CheckoutDraft>) => void } | null>(null);
 
 export function CheckoutProvider({ children }: PropsWithChildren) {
-  // Session-only draft: navigation keeps it; refreshing/restarting clears it.
-  const [draft, setDraft] = useState(initialCheckout);
-  return <Context.Provider value={{ draft, setDraft }}>{children}</Context.Provider>;
+  const { profile } = useProfile();
+  // Keep edits for this checkout session, including fields the recipient clears.
+  const [edits, setEdits] = useState<Partial<CheckoutDraft>>({});
+  const draft = {
+    ...initialCheckout(),
+    name: profile?.fullName ?? '',
+    phone: profile?.phone ?? '',
+    ...edits,
+  };
+  function updateDraft(changes: Partial<CheckoutDraft>) {
+    setEdits(previous => ({ ...previous, ...changes }));
+  }
+  return <Context.Provider value={{ draft, updateDraft }}>{children}</Context.Provider>;
 }
 
 export function useCheckout() {

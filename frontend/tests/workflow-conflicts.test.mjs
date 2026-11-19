@@ -1,8 +1,9 @@
+import './catalog-fixture.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mergePendingRecords } from '../src/domain/prescription-sync.ts';
 import { navigationPortal } from '../src/domain/public-access.ts';
-import { isCurrentOrder, statusInfo, timelineSteps, createDemoOrder, initialOrders } from '../src/domain/orders.ts';
+import { isCurrentOrder, statusInfo, timelineSteps, prepareOrder, initialOrders } from '../src/domain/orders.ts';
 import { prescriptionLabel } from '../src/domain/prescriptions.ts';
 
 test('remote polling preserves unsynced new files and local edits until acknowledgement', () => {
@@ -32,15 +33,15 @@ test('delivery issues and retries remain current until a completed return', () =
   assert.ok(timelineSteps('delivery', true).some(step => step.status === 'rider_collected'));
 });
 
-test('managed reviews use pharmacist wording and sample reviews remain clearly labeled', () => {
+test('prescription status labels describe pharmacist decisions', () => {
   assert.equal(prescriptionLabel({ managed: true, status: 'approved' }), 'Pharmacist approved');
-  assert.match(prescriptionLabel({ managed: false, status: 'approved' }), /demo/);
+  assert.equal(prescriptionLabel({ status: 'pending' }), 'Awaiting pharmacist');
 });
 
 test('reusing a checkout key cannot silently replace another cart', () => {
   const draft = { method: 'pickup', name: 'Customer', phone: '09123456789', address: null };
   const cart = [{ medicineId: 'cetirizine', pharmacyId: 'healthplus', quantity: 1 }];
-  const first = createDemoOrder(initialOrders(), cart, draft, 'one', 1);
+  const first = prepareOrder(initialOrders(), cart, draft, 'one', 1);
   assert.equal(first.ok, true);
-  assert.equal(createDemoOrder(first.state, [{ ...cart[0], quantity: 2 }], draft, 'one', 2).ok, false);
+  assert.equal(prepareOrder(first.state, [{ ...cart[0], quantity: 2 }], draft, 'one', 2).ok, false);
 });

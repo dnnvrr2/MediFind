@@ -1,6 +1,8 @@
 import os
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Load an optional, local-only dotenv file without overriding environment values.
@@ -32,15 +34,26 @@ TEMPLATES = [{"BACKEND": "django.template.backends.django.DjangoTemplates", "DIR
 WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
 
-if os.getenv("DB_NAME"):
-    DATABASES = {"default": {"ENGINE": "django.db.backends.postgresql", "NAME": os.environ["DB_NAME"],
-        "USER": os.getenv("DB_USER", ""), "PASSWORD": os.getenv("DB_PASSWORD", ""),
-        "HOST": os.getenv("DB_HOST", "127.0.0.1"), "PORT": os.getenv("DB_PORT", "5432"),
-        "CONN_MAX_AGE": 60}}
-else:
-    DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": BASE_DIR / "db.sqlite3"}}
-if os.getenv("DB_TEST_NAME"):
-    DATABASES["default"]["TEST"] = {"NAME": os.environ["DB_TEST_NAME"]}
+database_name = os.getenv("DB_NAME", "").strip()
+if not database_name:
+    raise ImproperlyConfigured("Set DB_NAME to your PostgreSQL database name in backend/.env or the environment.")
+
+DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": database_name,
+        "USER": os.getenv("DB_USER", ""),
+        "PASSWORD": os.getenv("DB_PASSWORD", ""),
+        "HOST": os.getenv("DB_HOST", "127.0.0.1"),
+        "PORT": os.getenv("DB_PORT", "5432"),
+        "CONN_MAX_AGE": 60,
+    }
+}
+test_database_name = os.getenv("DB_TEST_NAME", "").strip()
+if test_database_name:
+    if test_database_name == database_name:
+        raise ImproperlyConfigured("DB_TEST_NAME must refer to a separate PostgreSQL database.")
+    DATABASES["default"]["TEST"] = {"NAME": test_database_name}
 
 AUTH_USER_MODEL = "accounts.Customer"
 AUTH_PASSWORD_VALIDATORS = [
@@ -60,7 +73,7 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": ["rest_framework_simplejwt.authentication.JWTAuthentication"],
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
     "DEFAULT_THROTTLE_CLASSES": ["rest_framework.throttling.AnonRateThrottle"],
-    "DEFAULT_THROTTLE_RATES": {"anon": "60/hour", "auth": "120/hour", "login": "10/minute", "register": "100/hour" if DEBUG else "5/hour", "password_reset": "5/hour", "rider_action": "10/minute", "rider_issue": "10/hour", "delivery_code": "10/minute"},
+    "DEFAULT_THROTTLE_RATES": {"anon": "60/hour", "catalog": "120/minute", "auth": "120/hour", "login": "10/minute", "register": "100/hour" if DEBUG else "5/hour", "password_reset": "5/hour", "rider_action": "10/minute", "rider_issue": "10/hour", "delivery_code": "10/minute"},
 }
 from datetime import timedelta
 SIMPLE_JWT = {"ACCESS_TOKEN_LIFETIME": timedelta(minutes=10), "REFRESH_TOKEN_LIFETIME": timedelta(days=7),

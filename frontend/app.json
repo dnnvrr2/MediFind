@@ -7,7 +7,7 @@
       [
         "expo-image-picker",
         {
-          "cameraPermission": "Allow MediFind to take a prescription photo for local preview.",
+          "cameraPermission": "Allow MediFind to take a photo of your prescription.",
           "microphonePermission": false,
           "photosPermission": false
         }
@@ -24,13 +24,21 @@
       "expo-sharing"
     ],
     "name": "MediFind",
+    "icon": "./assets/brand/app-icon.png",
     "userInterfaceStyle": "light",
     "slug": "medicine-search-ordering",
     "experiments": {
       "typedRoutes": true
     },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/brand/adaptive-icon.png",
+        "backgroundColor": "#10796F"
+      }
+    },
     "web": {
-      "output": "single"
+      "output": "single",
+      "favicon": "./assets/brand/favicon.png"
     }
   }
 }

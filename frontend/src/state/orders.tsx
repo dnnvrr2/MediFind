@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type PropsWithChildren } from 'react';
 import { api, ApiError, sessionGeneration } from '../api/client';
-import { createDemoOrder, initialOrders, remainingApprovals, transitionDemoOrder, type DemoOrder, type OrderResult, type OrderStatus } from '../domain/orders';
+import { prepareOrder, initialOrders, remainingApprovals, requestOrderCancellation, type Order, type OrderResult } from '../domain/orders';
 import type { CartItem } from '../domain/cart';
 import type { CheckoutDraft } from '../domain/checkout';
 import { usePrescriptions } from './prescriptions';
@@ -8,15 +8,15 @@ import { prescriptionGrants, type Approval } from '../domain/prescriptions';
 import { useProfile } from './profile';
 
 type OrdersContext = {
-  orders: DemoOrder[];
+  orders: Order[];
   approvals: Approval[];
   loading: boolean;
   syncIssue: string;
   placeOrder: (items: CartItem[], draft: CheckoutDraft, submissionKey: string) => Promise<OrderResult>;
-  updateOrder: (id: string, status: OrderStatus, note?: string) => Promise<OrderResult>;
+  cancelOrder: (id: string) => Promise<OrderResult>;
   refreshOrders: () => Promise<void>;
 };
-type RemoteOrder = { external_id: string; data: DemoOrder };
+type RemoteOrder = { external_id: string; data: Order };
 const Context = createContext<OrdersContext | null>(null);
 const orderRows = (value: { results?: RemoteOrder[] } | RemoteOrder[]) => Array.isArray(value) ? value : value.results ?? [];
 
@@ -33,7 +33,7 @@ export function OrdersProvider({ children }: PropsWithChildren) {
   const mutations = useRef(0);
   const fetching = useRef(false);
   const valid = () => alive.current && generation === sessionGeneration();
-  function commitOrder(result: Extract<OrderResult, { ok: true }>, order: DemoOrder) {
+  function commitOrder(result: Extract<OrderResult, { ok: true }>, order: Order) {
     const state = { orders: [order, ...latest.current.orders.filter(row => row.id !== order.id)], nextNumber: Math.max(latest.current.nextNumber, result.state.nextNumber) };
     latest.current = state; setState(state); setSyncIssue(''); mutations.current++;
     return { ...result, order, state };
@@ -60,23 +60,27 @@ export function OrdersProvider({ children }: PropsWithChildren) {
 
   const placeOrder: OrdersContext['placeOrder'] = async (items, draft, key) => {
     if (!profile || !valid()) return { ok: false, state: latest.current, issue: 'Sign in before placing an order.' };
-    const result = createDemoOrder(latest.current, items, draft, key, Date.now(), grants);
+    const result = prepareOrder(latest.current, items, draft, key, Date.now(), grants);
     if (!result.ok) return result;
     mutations.current++;
     try { const saved = await api.saveOrder(result.order.id, result.order); if (!valid()) return { ok: false, state: latest.current, issue: 'The account changed. Reopen your orders.' }; return commitOrder(result, saved.data); }
     catch (error) { return { ok: false, state: latest.current, issue: error instanceof ApiError ? error.message : 'Could not save this order. Retry with the same checkout.' }; }
   };
-  const updateOrder: OrdersContext['updateOrder'] = async (id, status, note = '') => {
-    if (!profile || !valid()) return { ok: false, state: latest.current, issue: 'Sign in to update your order.' };
+  const cancelOrder: OrdersContext['cancelOrder'] = async id => {
+    if (!profile || !valid()) return { ok: false, state: latest.current, issue: 'Sign in to cancel your order.' };
     const original = latest.current.orders.find(order => order.id === id);
-    if (original?.managed && status !== 'cancelled') return { ok: false, state: latest.current, issue: 'Only the pharmacy or assigned rider can update this order.' };
-    const result = transitionDemoOrder(latest.current, id, status, note, Date.now());
-    if (!result.ok) return result;
+    const requested = original?.managed ? requestOrderCancellation(original) : null;
+    if (!requested) return { ok: false, state: latest.current, issue: 'This order can no longer be cancelled.' };
     mutations.current++;
-    try { const saved = await api.saveOrder(result.order.id, result.order); if (!valid()) return { ok: false, state: latest.current, issue: 'The account changed. Reopen your orders.' }; return commitOrder(result, saved.data); }
-    catch (error) { return { ok: false, state: latest.current, issue: error instanceof ApiError ? error.message : 'Could not save the order update. Please try again.' }; }
+    try {
+      const saved = await api.saveOrder(id, requested);
+      if (!valid()) return { ok: false, state: latest.current, issue: 'The account changed. Reopen your orders.' };
+      return commitOrder({ ok: true, state: latest.current, order: requested, created: false }, saved.data);
+    } catch (error) {
+      return { ok: false, state: latest.current, issue: error instanceof ApiError ? error.message : 'Could not cancel this order.' };
+    }
   };
-  return <Context.Provider value={{ orders: state.orders, approvals: remainingApprovals(grants, state.orders), loading, syncIssue, placeOrder, updateOrder, refreshOrders }}>{children}</Context.Provider>;
+  return <Context.Provider value={{ orders: state.orders, approvals: remainingApprovals(grants, state.orders), loading, syncIssue, placeOrder, cancelOrder, refreshOrders }}>{children}</Context.Provider>;
 }
 export function useOrders() {
   const value = useContext(Context);

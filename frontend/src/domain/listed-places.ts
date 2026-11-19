@@ -6,7 +6,7 @@ import { insideCdo } from './cdo.ts';
 
 export const listedAreas: Place[] = [...suggestedAreas.map((label, i) => {
   const view = areaViewport(label)!;
-  return { id: `sample-area-${i}`, label, description: 'Sample area · Approximate area center', lat: (view.south + view.north) / 2, lon: (view.west + view.east) / 2 };
+  return { id: `cdo-area-${i}`, label, description: 'Approximate area center', lat: (view.south + view.north) / 2, lon: (view.west + view.east) / 2 };
 }), ...cdoBarangays.map(b => ({ id: `cdo-${b.name}`, label: `${b.name}, Cagayan de Oro City`, description: 'CDO barangay · Approximate map point', lat: b.lat, lon: b.lon }))];
 
 export function filterListedPlaces(query: string, saved: Place[] = []): Place[] {

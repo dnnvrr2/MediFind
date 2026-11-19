@@ -2,18 +2,19 @@ import { medicines, pharmacies, offers } from '../data/catalog.ts';
 import type { Medicine, Pharmacy } from '../data/catalog.ts';
 import { approvalFor, type Approval } from './prescriptions.ts';
 import type { CartItem } from './cart.ts';
+import { defaultArea } from './locations.ts';
 
 export type Fulfillment = 'pickup' | 'delivery';
 export type DeliveryAddress = { street: string; barangay: string; city: string; province: string; postalCode: string };
 export type CheckoutDraft = { method: Fulfillment; name: string; phone: string; address: DeliveryAddress | null };
-export type AddressErrors = Partial<Record<keyof DeliveryAddress, string>>;
+export type AddressErrors = Partial<Record<'street' | 'barangay', string>>;
 export type CheckoutErrors = Partial<Record<'name' | 'phone' | 'address', string>>;
 export type QuoteLine = { medicine: Medicine; quantity: number; unitPrice: number; subtotal: number; approval?: Approval };
 export type CheckoutQuote = { ok: true; pharmacy: Pharmacy; lines: QuoteLine[]; subtotal: number; deliveryFee: number; total: number; payment: string; method: Fulfillment } | { ok: false; issue: string };
 
-// Demonstration pricing only. Real delivery coverage and fees need a backend quote.
-export const SAMPLE_DELIVERY_FEE = 50;
-export const emptyAddress = (): DeliveryAddress => ({ street: '', barangay: '', city: '', province: '', postalCode: '' });
+// Match the delivery fee used by the pharmacy order API.
+export const DELIVERY_FEE = 50;
+export const emptyAddress = (): DeliveryAddress => ({ street: '', barangay: '', city: defaultArea, province: '', postalCode: '' });
 export const initialCheckout = (): CheckoutDraft => ({ method: 'pickup', name: '', phone: '', address: null });
 
 export function normalizePhone(value: string): string | null {
@@ -27,16 +28,14 @@ export function validateAddress(address: DeliveryAddress | null): AddressErrors 
   const errors: AddressErrors = {};
   if (!address?.street.trim()) errors.street = 'Enter the house/building and street.';
   if (!address?.barangay.trim()) errors.barangay = 'Enter the barangay.';
-  if (!address?.city.trim()) errors.city = 'Enter the city or municipality.';
-  if (!address?.province.trim()) errors.province = 'Enter the province.';
-  if (address?.postalCode.trim() && !/^\d{4}$/.test(address.postalCode.trim())) errors.postalCode = 'Use a 4-digit postal code, or leave it blank.';
   return errors;
 }
 
 export function validateCheckout(draft: CheckoutDraft): CheckoutErrors {
   const errors: CheckoutErrors = {};
   if (!draft.name.trim()) errors.name = 'Enter the recipient’s full name.';
-  if (!normalizePhone(draft.phone)) errors.phone = 'Enter a Philippine mobile number: 09XXXXXXXXX or +639XXXXXXXXX.';
+  if (!draft.phone.trim()) errors.phone = 'Enter your mobile number.';
+  else if (!normalizePhone(draft.phone)) errors.phone = 'Invalid number';
   if (draft.method === 'delivery' && Object.keys(validateAddress(draft.address)).length) errors.address = 'Add a complete delivery address before continuing.';
   return errors;
 }
@@ -64,6 +63,6 @@ export function quoteCheckout(items: CartItem[], method: Fulfillment, grants: Ap
     lines.push({ ...(approval ? { approval: { ...approval } } : {}), medicine, quantity: item.quantity, unitPrice: offer.price, subtotal: Math.round(offer.price * 100) * item.quantity / 100 });
   }
   const subtotal = lines.reduce((cents, line) => cents + Math.round(line.subtotal * 100), 0) / 100;
-  const deliveryFee = method === 'delivery' ? SAMPLE_DELIVERY_FEE : 0;
+  const deliveryFee = method === 'delivery' ? DELIVERY_FEE : 0;
   return { ok: true, pharmacy, lines, subtotal, deliveryFee, total: Math.round((subtotal + deliveryFee) * 100) / 100, payment: method === 'delivery' ? 'Cash on Delivery' : 'Pay at Pharmacy', method };
 }

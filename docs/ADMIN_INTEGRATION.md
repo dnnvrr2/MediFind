@@ -36,7 +36,7 @@ $env:CORS_ALLOWED_ORIGINS = 'http://localhost:8081,http://127.0.0.1:8081'
 3. Review the application and download its documents. Approve, request information, or reject; a reason is required for the latter two actions.
 4. Once a pharmacy is approved, add medicine requests from the catalog tab and review them. Decisions survive reloads.
 
-This checkout uses SQLite when no PostgreSQL settings are configured. Its local database and uploads are ignored by Git. Keep documents private in deployment; do not expose `PRIVATE_MEDIA_ROOT` through a public media server. Use the backend environment setup in `backend/README.md` for deployment rather than the local DEBUG command above.
+This checkout stores records in PostgreSQL and keeps private uploads under `PRIVATE_MEDIA_ROOT`. Keep documents private in deployment and follow the PostgreSQL environment setup in `backend/README.md`.
 
 ## API
 

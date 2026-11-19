@@ -1,5 +1,5 @@
 import React, { useContext, useRef } from 'react';
-import { Pressable, StyleSheet, View, ScrollView, TextInput, useWindowDimensions } from 'react-native';
+import { Pressable, StyleSheet, View, ScrollView, TextInput, useWindowDimensions, type StyleProp, type ViewStyle } from 'react-native';
 import { router } from 'expo-router';
 import { Icon, type IconName } from './icon';
 import { FontsReady, fontFamilies, Text } from './typography';
@@ -38,14 +38,14 @@ export function Page({ children, sectionGap, scrollRef, scrollKey }: React.Props
 
 export function Card({ children }: React.PropsWithChildren) { return <View style={s.card}>{children}</View>; }
 
-export function Button({ title, onPress, disabled = false, secondary = false, icon }: {
-  title: string; onPress: () => void; disabled?: boolean; secondary?: boolean; icon?: IconName;
+export function Button({ title, onPress, disabled = false, secondary = false, danger = false, icon }: {
+  title: string; onPress: () => void; disabled?: boolean; secondary?: boolean; danger?: boolean; icon?: IconName;
 }) {
   return (
     <Pressable accessibilityRole="button" aria-disabled={disabled} accessibilityState={{ disabled }} disabled={disabled} onPress={onPress}
-      style={({ pressed }) => [s.button, secondary && { backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line }, disabled && { backgroundColor: '#E3E8E5' }, pressed && { opacity: 0.75 }]}>
-      {icon && <Icon name={icon} size={20} color={disabled ? colors.muted : secondary ? colors.teal : colors.white} />}
-      <Text style={[s.buttonText, (secondary || disabled) && { color: disabled ? colors.muted : colors.teal, flexShrink: 1 }]}>{title}</Text>
+      style={({ pressed }) => [s.button, secondary && { backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line }, danger && { backgroundColor: colors.white, borderWidth: 1, borderColor: colors.danger }, disabled && { backgroundColor: '#E3E8E5' }, pressed && { opacity: 0.75 }]}>
+      {icon && <Icon name={icon} size={20} color={disabled ? colors.muted : danger ? colors.danger : secondary ? colors.teal : colors.white} />}
+      <Text style={[s.buttonText, (secondary || danger || disabled) && { color: disabled ? colors.muted : danger ? colors.danger : colors.teal, flexShrink: 1 }]}>{title}</Text>
     </Pressable>
   );
 }
@@ -54,6 +54,20 @@ export function TextLink({ title, onPress, icon }: { title: string; onPress: () 
   return <Pressable accessibilityRole="link" onPress={onPress} style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 7, alignSelf: 'flex-start' }}>
     <Text style={[s.link, { flexShrink: 1 }]}>{title}</Text>{icon && <Icon name={icon} size={18} />}
   </Pressable>;
+}
+
+export type FilterChipOption<T extends string> = { value: T; label: string };
+export function FilterChips<T extends string>({ options, selected, onSelect, accessibilityLabel = 'Filter results', style }: {
+  options: readonly FilterChipOption<T>[]; selected: T; onSelect: (value: T) => void; accessibilityLabel?: string; style?: StyleProp<ViewStyle>;
+}) {
+  return <ScrollView horizontal showsHorizontalScrollIndicator={false} style={[{ flexGrow: 0 }, style]} contentContainerStyle={{ gap: 8, paddingVertical: 2 }} accessibilityLabel={accessibilityLabel}>
+    {options.map(option => {
+      const active = option.value === selected;
+      return <Pressable key={option.value} accessibilityRole="tab" accessibilityLabel={option.label} accessibilityState={{ selected: active }} aria-pressed={active} onPress={() => onSelect(option.value)} style={({ pressed }) => ({ minHeight: 44, justifyContent: 'center', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8, borderWidth: 1, borderColor: active ? colors.teal : colors.line, backgroundColor: active ? colors.pale : colors.white, opacity: pressed ? 0.75 : 1 })}>
+        <Text style={{ color: active ? colors.teal : colors.muted, fontSize: 14, lineHeight: 20, fontWeight: '600' }}>{option.label}</Text>
+      </Pressable>;
+    })}
+  </ScrollView>;
 }
 
 export function Badge({ text, warning = false, neutral = false }: { text: string; warning?: boolean; neutral?: boolean }) {

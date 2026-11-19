@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Modal, Pressable, ScrollView, View } from 'react-native';
 import { Button, Text, colors, s } from './ui';
+import { RequiredMark } from './checkout-field';
 import { dayNames, timeLabel, scheduleSummary, scheduleError, type OpeningDay } from '../domain/pharmacy-schedule';
 
 function HoursSwitch({ accessibilityLabel, value, onValueChange, disabled = false }: {
@@ -37,7 +38,7 @@ export function OpeningHoursEditor({ value, onChange, disabled = false, readOnly
   const issue = scheduleError(value);
   function patch(day: number | null, changes: Partial<OpeningDay>) { onChange(value.map(row => day === null ? { ...row, ...changes } : row.day === day ? { ...row, ...changes } : row)); }
   function times(row: OpeningDay, day: number | null) { return <View style={{ gap: 8 }}><View style={s.between}><Text style={s.muted}>Open 24 hours</Text><HoursSwitch accessibilityLabel={day === null ? 'Open 24 hours' : `${dayNames[day]} open 24 hours`} value={row.allDay} disabled={disabled || readOnly} onValueChange={allDay => patch(day, { allDay })} /></View>{!row.allDay && <View style={s.row}><TimePicker value={row.opens} label="Opens at" disabled={disabled || readOnly} onChange={opens => patch(day, { opens })} /><TimePicker value={row.closes} label="Closes at" disabled={disabled || readOnly} onChange={closes => patch(day, { closes })} /></View>}{!row.allDay && row.closes < row.opens && <Text style={s.caption}>Closes the following day.</Text>}</View>; }
-  return <View style={{ gap: 14 }}><Text style={s.heading}>Opening hours *</Text>
+  return <View style={{ gap: 14 }}><Text style={s.heading} accessibilityLabel={readOnly ? undefined : 'Opening hours, required'}>Opening hours{!readOnly && <RequiredMark />}</Text>
     {readOnly ? <Text style={s.text}>{scheduleSummary(value)}</Text> : <>
       <View style={s.between}><Text style={s.muted}>Different hours by day</Text><HoursSwitch accessibilityLabel="Different hours by day" value={custom} disabled={disabled} onValueChange={next => { if (!next && custom) patch(null, { opens: first.opens, closes: first.closes, allDay: first.allDay }); setCustom(next); }} /></View>
       <View style={s.row}>{['Mon-Fri', 'Mon-Sat', 'Every day'].map((label, index) => <Button key={label} title={label} secondary disabled={disabled} onPress={() => onChange(value.map(row => ({ ...row, open: row.day < [5, 6, 7][index] })))} />)}</View>

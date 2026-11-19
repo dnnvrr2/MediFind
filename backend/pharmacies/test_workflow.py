@@ -30,7 +30,7 @@ class WorkflowConflictTests(APITestCase):
         cls.staff = Customer.objects.create_superuser('wf-staff@example.com', 'review-password-123', full_name='Staff')
         cls.rider_user = Customer.objects.create_user('wf-rider@example.com', 'review-password-123', full_name='Rider')
         cls.employee = Customer.objects.create_user('wf-employee@example.com', 'review-password-123', full_name='Employee')
-        cls.pharmacy = PharmacyApplication.objects.create(name='Workflow branch', address='Carmen, Cagayan de Oro City', applicant='Owner', email='branch@example.com', phone='09123456789', hours='8 AM - 5 PM', status='Approved', is_open=True)
+        cls.pharmacy = PharmacyApplication.objects.create(name='Workflow branch', address='Carmen, Cagayan de Oro City', applicant='Owner', email='branch@example.com', phone='09123456789', hours='8 AM - 5 PM', status='Approved', is_open=True, accepts_orders=True)
         PharmacyMember.objects.create(user=cls.owner, pharmacy=cls.pharmacy, role='owner')
         cls.product = MedicineRequest.objects.create(pharmacy=cls.pharmacy, name='Workflow product', generic='Generic', strength='1 mg', form='Tablet', unit='tablet', prescription=False, status='Approved')
         cls.inventory = Inventory.objects.create(medicine=cls.product, price=Decimal('4.50'), stock=20)
@@ -69,6 +69,18 @@ class WorkflowConflictTests(APITestCase):
         self.assertEqual(CustomerOrder.objects.filter(owner=self.customer).count(), 1)
         response = self.client.post('/api/customer/orders/', {'external_id': first.external_id, 'data': self.payload(quantity=7)}, format='json')
         self.assertEqual(response.status_code, 409)
+
+    def test_order_acceptance_is_independent_of_store_open_status(self):
+        self.pharmacy.is_open = False
+        self.pharmacy.accepts_orders = True
+        self.pharmacy.save(update_fields=['is_open', 'accepts_orders'])
+        self.assertEqual(self.order('closed-but-accepting').data['pharmacy']['id'], str(self.pharmacy.pk))
+
+        self.pharmacy.is_open = True
+        self.pharmacy.accepts_orders = False
+        self.pharmacy.save(update_fields=['is_open', 'accepts_orders'])
+        with self.assertRaises(APIException):
+            self.order('open-but-paused')
 
     def test_admin_dispatch_cannot_bypass_pharmacy_acceptance_or_cancelled_order(self):
         order = self.order()

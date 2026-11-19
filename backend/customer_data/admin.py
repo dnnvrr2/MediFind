@@ -15,9 +15,12 @@ class CustomerOrderAdmin(admin.ModelAdmin):
     readonly_fields = ("owner", "external_id", "data", "created_at", "updated_at")
     change_list_template = "admin/customer_data/customerorder/change_list.html"
 
+    def get_queryset(self, request):
+        return super().get_queryset(request).exclude(external_id__startswith="DEMO-", pharmacy_order__isnull=True)
+
     def order_status(self, obj):
         return obj.data.get("status", "Unknown")
-    order_status.short_description = "Customer preview status"
+    order_status.short_description = "Order status"
 
     def get_urls(self):
         return [path("dispatch/", self.admin_site.admin_view(self.dispatch_view), name="customer_data_customerorder_dispatch")] + super().get_urls()

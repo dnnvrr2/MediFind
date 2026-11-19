@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState, useRef } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, Switch, View } from 'react-native';
+import { ActivityIndicator, Pressable, Switch, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { PharmacyBranchDetailsFields, usePharmacyBranchDetails } from '../components/pharmacy-branch-details';
 import { PharmacyTeamInvitations } from '../components/pharmacy-team';
 import { PharmacyApplicationForm } from '../components/pharmacy-application-form';
 import { api, ApiError, type PharmacySession, type PharmacyApplication, type PharmacyMedicine, type PharmacyPrescription, type PharmacyOrderRecord, type PharmacyActivity, type StockSettings } from '../api/client';
 import { useProfile } from '../state/profile';
-import { Back, Badge, Button, Card, DetailRow, Page, Text, TextLink, colors, s } from '../components/ui';
+import { Back, Badge, Button, Card, DetailRow, FilterChips, Page, Text, TextLink, colors, s } from '../components/ui';
 import { CheckoutField } from '../components/checkout-field';
 import { ProfileLinks } from '../components/profile-links';
 import { PrivateDocument } from '../components/private-document';
@@ -14,12 +14,28 @@ import { DestinationMap } from '../components/destination-map';
 import { money } from '../data/catalog';
 import { accountHome } from '../domain/public-access';
 import { type OrderStatus } from '../domain/orders';
+import { OrderTimeline } from '../components/order-timeline';
 
 type Tab = 'dashboard' | 'inventory' | 'prescriptions' | 'orders' | 'profile';
 const stateLabel = (value: string) => value.replace(/_/g, ' ').replace(/^./, v => v.toUpperCase());
 const finished = (value: string) => ['collected', 'delivered', 'cancelled', 'rejected', 'delivery_failed', 'returned'].includes(value);
 function Status({ value }: { value: string }) { return <Badge text={stateLabel(value)} warning={['Pending', 'Needs Info', 'pending', 'awaiting_confirmation'].includes(value)} neutral={['Draft', 'Rejected', 'rejected', 'cancelled'].includes(value)} />; }
-function Toggle({ label, value, onChange, disabled }: { label: string; value: boolean; onChange: (v: boolean) => void; disabled?: boolean }) { return <View style={s.between}><Text style={[s.text, { flex: 1 }]}>{label}</Text><Switch accessibilityLabel={label} disabled={disabled} value={value} onValueChange={onChange} trackColor={{ true: colors.teal }} /></View>; }
+function Toggle({ label, value, onChange, disabled }: { label: string; value: boolean; onChange: (v: boolean) => void; disabled?: boolean }) { return <View style={s.between}><Text style={[s.text, { flex: 1 }]}>{label}</Text><Switch accessibilityLabel={label} disabled={disabled} value={value} onValueChange={onChange} trackColor={{ false: '#AAB7B3', true: colors.teal }} thumbColor={value ? colors.white : '#65736F'} ios_backgroundColor="#AAB7B3" /></View>; }
+
+function nextOrderAction(order: PharmacyOrderRecord): { label: string; status?: OrderStatus; assignRider?: boolean; success?: string } | null {
+  switch (order.data.status) {
+    case 'awaiting_confirmation': return { label: 'Accept & reserve stock', status: 'confirmed', success: 'Order accepted and stock reserved.' };
+    case 'confirmed': return { label: 'Start preparing', status: 'preparing' };
+    case 'preparing': return order.data.method === 'pickup' ? { label: 'Ready for pickup', status: 'ready_for_pickup' } : { label: 'Ready for rider', status: 'ready_for_collection' };
+    case 'ready_for_pickup': return { label: 'Confirm pickup', status: 'collected' };
+    case 'ready_for_collection': return !order.rider || ['declined', 'cancelled'].includes(order.rider.status) ? { label: 'Assign rider', assignRider: true } : null;
+    default: return null;
+  }
+}
+
+function undoLabel(status: string) {
+  return ({ confirmed: 'Accept order', preparing: 'Start preparing', ready_for_pickup: 'Mark ready for pickup', ready_for_collection: 'Mark ready for rider' } as Record<string, string>)[status] || 'Update order';
+}
 
 function MedicineForm({ initial, busy, save, close }: { initial: PharmacyMedicine | null; busy: boolean; save: (data: Record<string, unknown>) => void; close: () => void }) {
   const [values, setValues] = useState({ name: initial?.name || '', generic: initial?.generic || '', strength: initial?.strength || '', form: initial?.form || '', unit: initial?.unit || 'tablet' });
@@ -80,6 +96,8 @@ export function PharmacyPortal() {
   const orderEdit = orders.find(order => order.id === orderEditId) || null;
   const [orderNote, setOrderNote] = useState('');
   const [confirmAction, setConfirmAction] = useState('');
+  const [quickConfirm, setQuickConfirm] = useState<{ orderId: number; status: OrderStatus; label: string; success: string } | null>(null);
+  const [undoAction, setUndoAction] = useState<{ orderId: number; version: number; status: string; label: string } | null>(null);
   const [rider, setRider] = useState<number | null>(null);
   const account = useRef(profile?.email);
   account.current = profile?.email;
@@ -96,14 +114,25 @@ export function PharmacyPortal() {
     }
   }, [refreshProfile]);
   useEffect(() => { let live = true; setLoading(true); setSession(null); setMedicines([]); setOrders([]); setPrescriptions([]); setActivity([]); setStockSettings(null); setError(''); refresh().catch(e => { if (live) setError(e.message); }).finally(() => { if (live) setLoading(false); }); const timer = setInterval(() => { if (live) refresh().catch(() => undefined); }, 20000); return () => { live = false; clearInterval(timer); }; }, [refresh, profile?.email]);
-  useEffect(() => { setQuery(''); setFilter('All'); setRequesting(false); setMedicineEdit(null); setInventoryEdit(null); setRxEdit(null); setOrderEditId(null); setConfirmAction(''); }, [tab]);
-  async function act(action: () => Promise<unknown>, message: string, done?: () => void) {
+  useEffect(() => { setQuery(''); setFilter('All'); setRequesting(false); setMedicineEdit(null); setInventoryEdit(null); setRxEdit(null); setOrderEditId(null); setConfirmAction(''); setQuickConfirm(null); }, [tab]);
+  async function act(action: () => Promise<unknown>, message: string, done?: (result: unknown) => void) {
     if (busy) return;
     setBusy(true); setError(''); setNotice('');
-    try { await action(); setNotice(message); done?.(); await refresh(); }
-    catch (e) { setError(e instanceof Error ? e.message : 'The action could not be saved.'); if (e instanceof ApiError && e.status === 409) { setInventoryEdit(null); setRxEdit(null); setOrderEditId(null); setConfirmAction(''); await refresh().catch(() => undefined); } }
+    try { const result = await action(); setNotice(message); done?.(result); await refresh(); }
+    catch (e) { setError(e instanceof Error ? e.message : 'The action could not be saved.'); if (e instanceof ApiError && e.status === 409) { setInventoryEdit(null); setRxEdit(null); setOrderEditId(null); setConfirmAction(''); setQuickConfirm(null); await refresh().catch(() => undefined); } }
     finally { setBusy(false); }
   }
+  const storeUndo = (result: unknown, label: string) => {
+    if (!result || typeof result !== 'object' || !('id' in result) || !('version' in result) || !('data' in result)) return;
+    const updated = result as PharmacyOrderRecord;
+    if (['confirmed', 'preparing', 'ready_for_pickup', 'ready_for_collection'].includes(updated.data.status)) {
+      setUndoAction({ orderId: updated.id, version: updated.version, status: updated.data.status, label });
+    } else setUndoAction(null);
+  };
+  const undoLatest = () => {
+    if (!undoAction) return;
+    void act(() => api.pharmacyUndoOrder(undoAction.orderId, undoAction.version, undoAction.status), 'Order progress undone.', () => setUndoAction(null));
+  };
   const app = session?.application;
   const approved = app?.status === 'Approved';
   const editable = !app || ['Draft', 'Needs Info', 'Rejected'].includes(app.status);
@@ -115,7 +144,7 @@ export function PharmacyPortal() {
   const lowStock = medicines.filter(m => m.inventory && m.inventory.available && m.inventory.stock - m.inventory.reserved <= m.inventory.low_stock);
   const visibleMedicines = medicines.filter(m => `${m.name} ${m.generic} ${m.strength}`.toLowerCase().includes(query.toLowerCase()) && (filter === 'All' || (filter === 'Low stock' ? lowStock.includes(m) : filter === 'Out of stock' ? outOfStock.includes(m) : m.status === filter)));
   const visibleOrders = orders.filter(o => `${o.data.id} ${o.data.recipient.name}`.toLowerCase().includes(query.toLowerCase()) && (filter === 'All' || (filter === 'Current' ? !finished(o.data.status) : finished(o.data.status))));
-  return <Page scrollKey={`pharmacy-${tab}`}><View style={s.between}><Text accessibilityRole="header" style={s.title}>{!approved && tab !== 'profile' ? 'Pharmacy application' : stateLabel(tab)}</Text><View style={s.row}>{approved && tab === 'inventory' && <TextLink title="Stock settings" icon="settings" onPress={() => router.push({ pathname: '/partner/stock-settings', params: { tab: 'inventory' } })} />}<TextLink title="Refresh" icon="refresh" onPress={() => void act(refresh, 'Records refreshed.')} /></View></View>{loading && <ActivityIndicator accessibilityLabel="Loading pharmacy records" color={colors.teal} />}{!!error && <Text accessibilityRole="alert" style={{ color: colors.danger }}>{error}</Text>}{!!notice && <Text accessibilityRole="alert" style={s.muted}>{notice}</Text>}
+  return <Page scrollKey={`pharmacy-${tab}`}><View style={s.between}><Text accessibilityRole="header" style={s.title}>{!approved && tab !== 'profile' ? 'Pharmacy application' : stateLabel(tab)}</Text><View style={s.row}>{approved && tab === 'inventory' && <TextLink title="Stock settings" icon="settings" onPress={() => router.push({ pathname: '/partner/stock-settings', params: { tab: 'inventory' } })} />}<TextLink title="Refresh" icon="refresh" onPress={() => void act(refresh, 'Records refreshed.')} /></View></View>{loading && <ActivityIndicator accessibilityLabel="Loading pharmacy records" color={colors.teal} />}{!!error && <Text accessibilityRole="alert" style={{ color: colors.danger }}>{error}</Text>}{!!notice && <View style={[s.between, { alignItems: 'center' }]}><Text accessibilityRole="alert" style={[s.muted, { flex: 1 }]}>{notice}</Text>{tab === 'orders' && undoAction && <Button title={`Undo: ${undoAction.label}`} secondary disabled={busy} onPress={undoLatest} />}</View>}
     {!loading && session && !approved && tab !== 'profile' && <>
       <Button title={profile?.isStaff ? 'Back to administration' : 'Back to home'} secondary icon="back" onPress={() => router.replace(accountHome(profile))} />
       {app && <Card><View style={s.between}><Text style={s.heading}>{app.name}</Text><Status value={app.status} /></View>{!!app.notes && <Text style={s.text}>{app.notes}</Text>}{app.status === 'Pending' && <Text style={s.muted}>Your application is with admin for review.</Text>}{app.history.map(event => <View key={event.id} style={{ gap: 4 }}><Text style={s.muted}>{stateLabel(event.status)} - {new Date(event.created_at).toLocaleDateString()}</Text>{!!event.notes && <Text style={s.caption}>{event.notes}</Text>}</View>)}</Card>}
@@ -123,18 +152,20 @@ export function PharmacyPortal() {
       <Text style={s.muted}>Approval is required before inventory, prescription review, and orders become available.</Text>
     </>}
     {!loading && approved && tab === 'dashboard' && <>
-      <Card><View style={s.between}><View style={{ flex: 1 }}><Text style={s.heading}>{app.name}</Text><Text style={s.muted}>{app.address}</Text></View><Status value={app.is_open ? 'Open' : 'Closed'} /></View><Toggle label="Accept orders" value={app.is_open} disabled={busy || session?.role === 'staff'} onChange={value => void act(() => api.pharmacySetOpen(value), value ? 'Pharmacy opened.' : 'Pharmacy closed.')} /></Card>
+      <Card><View style={s.between}><View style={{ flex: 1 }}><Text style={s.heading}>{app.name}</Text><Text style={s.muted}>{app.address}</Text></View><Status value={app.is_open ? 'Open' : 'Closed'} /></View><Toggle label="Open to customers" value={app.is_open} disabled={busy || session?.role === 'staff'} onChange={value => void act(() => api.pharmacySetOpen(value), value ? 'Pharmacy marked open.' : 'Pharmacy marked closed.')} /><Toggle label="Accept orders" value={app.accepts_orders} disabled={busy || session?.role === 'staff'} onChange={value => void act(() => api.pharmacySetAcceptsOrders(value), value ? 'Orders enabled.' : 'Orders paused.')} /></Card>
       <View style={s.row}>{[{ title: 'New orders', count: pendingOrders.length, tab: 'orders' }, { title: 'Prescription reviews', count: pendingRx.length, tab: 'prescriptions' }, { title: 'Low stock', count: lowStock.length, tab: 'inventory' }, { title: 'Out of stock', count: outOfStock.length, tab: 'inventory' }].map(item => <Pressable key={item.title} accessibilityRole="link" onPress={() => move(item.tab as Tab)} style={[s.card, { flexGrow: 1, minWidth: 130 }]}><Text style={s.title}>{item.count}</Text><Text style={s.muted}>{item.title}</Text></Pressable>)}</View>
       <Card><Text style={s.heading}>Activity</Text>{activity.length ? activity.slice(0, 10).map(event => <View key={event.id} style={{ gap: 4 }}><Text style={s.text}>{event.action}</Text><Text style={s.caption}>{event.actor} - {new Date(event.created_at).toLocaleString()}</Text>{!!event.note && <Text style={s.muted}>{event.note}</Text>}</View>) : <Text style={s.muted}>No activity yet.</Text>}</Card>
     </>}
     {!loading && approved && tab === 'inventory' && <>
       {requesting ? <MedicineForm initial={medicineEdit} busy={busy} close={() => setRequesting(false)} save={data => void act(() => api.pharmacyMedicineRequest(data), 'Medicine request submitted.', () => { setRequesting(false); setMedicineEdit(null); })} /> : inventoryEdit ? <InventoryForm key={inventoryEdit.id} item={inventoryEdit} busy={busy} close={() => setInventoryEdit(null)} save={(id, data) => void act(() => api.pharmacyInventory(id, data), 'Inventory saved.', () => setInventoryEdit(null))} /> : <>
-        {stockSettings && <View style={s.between}><View style={{ gap: 4, flex: 1 }}><Text style={s.muted}>Stock updates: {stockSettings.method === 'csv' ? 'CSV imports' : 'Manual'}</Text>{stockSettings.method === 'csv' && <Text style={s.caption}>{stockSettings.last_import ? `Last imported: ${new Date(stockSettings.last_import.at).toLocaleString('en-PH')}` : 'No CSV imports yet'}</Text>}</View>{stockSettings.method === 'csv' && <Button title="Import CSV" icon="upload" disabled={busy} onPress={() => router.push({ pathname: '/partner/stock-settings', params: { tab: 'inventory', import: '1' } })} />}</View>}
-        <CheckoutField label="Search inventory" value={query} onChangeText={setQuery} />
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1, minWidth: 0 }} contentContainerStyle={{ gap: 12 }}>{['All', 'Approved', 'Pending', 'Rejected', 'Low stock', 'Out of stock'].map(value => <Button key={value} title={value} secondary={filter !== value} onPress={() => setFilter(value)} />)}</ScrollView>
-          <View style={{ flexShrink: 0 }}><Button title="Request medicine" icon="plus" disabled={busy} onPress={() => { setMedicineEdit(null); setRequesting(true); }} /></View>
-        </View>
+         <Card>
+           {stockSettings && <View style={s.between}><View style={{ gap: 4, flex: 1 }}><Text style={s.muted}>Stock updates: {stockSettings.method === 'csv' ? 'CSV imports' : 'Manual'}</Text>{stockSettings.method === 'csv' && <Text style={s.caption}>{stockSettings.last_import ? `Last imported: ${new Date(stockSettings.last_import.at).toLocaleString('en-PH')}` : 'No CSV imports yet'}</Text>}</View>{stockSettings.method === 'csv' && <Button title="Import CSV" icon="upload" disabled={busy} onPress={() => router.push({ pathname: '/partner/stock-settings', params: { tab: 'inventory', import: '1' } })} />}</View>}
+           <CheckoutField label="Search inventory" value={query} onChangeText={setQuery} />
+           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+             <FilterChips options={['All', 'Approved', 'Pending', 'Rejected', 'Low stock', 'Out of stock'].map(value => ({ value, label: value }))} selected={filter} onSelect={setFilter} accessibilityLabel="Filter inventory" style={{ flex: 1, minWidth: 0 }} />
+             <View style={{ flexShrink: 0 }}><Button title="Request medicine" icon="plus" disabled={busy} onPress={() => { setMedicineEdit(null); setRequesting(true); }} /></View>
+           </View>
+         </Card>
         {visibleMedicines.map(m => <Card key={m.id}><View style={s.between}><Text style={[s.heading, { flexShrink: 1 }]}>{m.name}</Text><Status value={m.status} /></View><Text style={s.muted}>{m.strength} - {m.form}</Text><Badge text={m.prescription ? 'Prescription' : 'OTC'} neutral={!m.prescription} />{m.status === 'Approved' ? <><DetailRow label="Available / reserved" value={`${(m.inventory?.stock ?? 0) - (m.inventory?.reserved ?? 0)} / ${m.inventory?.reserved ?? 0}`} /><DetailRow label="Price" value={m.inventory ? money(Number(m.inventory.price)) : 'Not set'} /><Button title="Set stock and price" secondary onPress={() => setInventoryEdit(m)} /></> : <>{!!m.notes && <Text style={s.text}>{m.notes}</Text>}<Button title={m.status === 'Rejected' ? 'Update and resubmit' : 'Edit request'} secondary onPress={() => { setMedicineEdit(m); setRequesting(true); }} /></>}</Card>)}{!visibleMedicines.length && <Card><Text style={s.muted}>{medicines.length ? 'No medicines match this filter.' : 'No medicines yet.'}</Text></Card>}
       </>}
     </>}
@@ -144,15 +175,51 @@ export function PharmacyPortal() {
     </>}
     {!loading && approved && tab === 'orders' && <>
       {orderEdit ? <>
-        <Back title={orderEdit.data.id} onBack={() => { setOrderEditId(null); setConfirmAction(''); }} /><Card><View style={s.between}><Text style={s.heading}>{orderEdit.data.recipient.name}</Text><Status value={orderEdit.data.status} /></View><Text style={s.muted}>{orderEdit.data.recipient.phone}</Text>{orderEdit.data.lines.map(line => <View key={line.medicine.id} style={{ gap: 4 }}><Text style={s.text}>{line.medicine.name} - {line.medicine.strength} {line.medicine.form}</Text><Text style={s.muted}>{line.quantity} {line.medicine.unit} - {money(line.subtotal)}</Text>{line.approval && <Badge text={`Rx ${line.approval.prescriptionId}`} />}</View>)}<DetailRow label="Total" value={money(orderEdit.data.total)} /><DetailRow label="Payment" value={orderEdit.data.payment} /><DetailRow label="Fulfillment" value={stateLabel(orderEdit.data.method)} />{orderEdit.data.address && <><Text style={s.text}>{Object.values(orderEdit.data.address).filter(Boolean).join(', ')}</Text><DestinationMap address={Object.values(orderEdit.data.address).filter(Boolean).join(', ')} barangay={orderEdit.data.address.barangay} city={orderEdit.data.address.city} /></>}</Card>
-        {!finished(orderEdit.data.status) && <Card><CheckoutField label="Order notes / rejection reason" value={orderNote} onChangeText={setOrderNote} maxLength={1000} multiline />{confirmAction ? <><Text style={s.text}>Confirm: {stateLabel(confirmAction)}?</Text><Button title="Confirm update" disabled={busy} onPress={() => void act(() => api.pharmacyOrderAction(orderEdit.id, { version: orderEdit.version, status: confirmAction, note: orderNote }), 'Order updated.', () => { setOrderEditId(null); setConfirmAction(''); })} /><Button title="Cancel" secondary disabled={busy} onPress={() => setConfirmAction('')} /></> : ({ awaiting_confirmation: ['confirmed', 'rejected'], confirmed: ['preparing'], preparing: [orderEdit.data.method === 'pickup' ? 'ready_for_pickup' : 'ready_for_collection'], ready_for_pickup: ['collected'] } as Record<string, string[]>)[orderEdit.data.status]?.map(status => <Button key={status} title={{ confirmed: 'Accept and reserve stock', rejected: 'Reject order', preparing: 'Start preparing', ready_for_pickup: 'Ready for pickup', ready_for_collection: 'Ready for rider collection', collected: 'Confirm customer collection' }[status] || stateLabel(status)} secondary={status === 'rejected'} disabled={busy || (status === 'rejected' && !orderNote.trim())} onPress={() => setConfirmAction(status)} />)}</Card>}
+        <Back title={orderEdit.data.id} onBack={() => { setOrderEditId(null); setConfirmAction(''); }} /><Card><View style={s.between}><Text style={s.heading}>{orderEdit.data.recipient.name}</Text><Status value={orderEdit.data.status} /></View><Text style={s.muted}>{orderEdit.data.recipient.phone}</Text>{orderEdit.data.lines.map(line => <View key={line.medicine.id} style={{ gap: 4 }}><Text style={s.text}>{line.medicine.name} - {line.medicine.strength} {line.medicine.form}</Text><Text style={s.muted}>{line.quantity} {line.medicine.unit} - {money(line.subtotal)}</Text>{line.approval && <Badge text={`Rx ${line.approval.prescriptionId}`} />}</View>)}<DetailRow label="Total" value={money(orderEdit.data.total)} /><DetailRow label="Payment" value={orderEdit.data.payment} /><DetailRow label="Fulfillment" value={stateLabel(orderEdit.data.method)} />{orderEdit.data.address && <><Text style={s.text}>{Object.values(orderEdit.data.address).filter(Boolean).join(', ')}</Text><DestinationMap address={Object.values(orderEdit.data.address).filter(Boolean).join(', ')} barangay={orderEdit.data.address.barangay} city={orderEdit.data.address.city} /></>}</Card><OrderTimeline order={orderEdit.data} orientation="horizontal" />
+        {!finished(orderEdit.data.status) && <Card><CheckoutField label="Order notes / rejection reason" value={orderNote} onChangeText={setOrderNote} maxLength={1000} multiline />{confirmAction ? <><Text style={s.text}>Confirm: {stateLabel(confirmAction)}?</Text><Button title="Confirm update" disabled={busy} onPress={() => void act(() => api.pharmacyOrderAction(orderEdit.id, { version: orderEdit.version, status: confirmAction, note: orderNote }), 'Order updated.', result => { storeUndo(result, undoLabel(confirmAction)); setOrderEditId(null); setConfirmAction(''); })} /><Button title="Cancel" secondary disabled={busy} onPress={() => setConfirmAction('')} /></> : ({ awaiting_confirmation: ['confirmed', 'rejected'], confirmed: ['preparing'], preparing: [orderEdit.data.method === 'pickup' ? 'ready_for_pickup' : 'ready_for_collection'], ready_for_pickup: ['collected'] } as Record<string, string[]>)[orderEdit.data.status]?.map(status => <Button key={status} title={{ confirmed: 'Accept and reserve stock', rejected: 'Reject order', preparing: 'Start preparing', ready_for_pickup: 'Ready for pickup', ready_for_collection: 'Ready for rider collection', collected: 'Confirm customer collection' }[status] || stateLabel(status)} secondary={status === 'rejected'} disabled={busy || (status === 'rejected' && !orderNote.trim())} onPress={() => setConfirmAction(status)} />)}</Card>}
         {orderEdit.data.status === ('ready_for_collection' as OrderStatus) && (!orderEdit.rider || ['declined', 'cancelled'].includes(orderEdit.rider.status)) && <Card><Text style={s.heading}>Assign rider</Text>{riders.map(r => <Button key={r.id} title={`${r.name} - ${r.vehicle}`} secondary={rider !== r.id} disabled={busy} onPress={() => setRider(r.id)} />)}{!riders.length && <Text style={s.muted}>No approved riders are available. Keep the package ready and refresh later.</Text>}<Button title="Send collection offer" disabled={busy || rider === null} onPress={() => rider !== null && void act(() => api.pharmacyHandoff(orderEdit.id, orderEdit.version, rider), 'Rider offer sent.', () => setOrderEditId(null))} /></Card>}
         {orderEdit.rider && <Card><Text style={s.heading}>Rider handoff</Text><Text style={s.text}>{orderEdit.rider.name}</Text><Status value={orderEdit.rider.status} /></Card>}
-      </> : <><CheckoutField label="Search orders" value={query} onChangeText={setQuery} /><View style={s.row}>{['All', 'Current', 'Closed'].map(value => <Button key={value} title={value} secondary={filter !== value} onPress={() => setFilter(value)} />)}</View>{visibleOrders.map(o => <Card key={o.id}><View style={s.between}><Text style={s.heading}>{o.data.id}</Text><Status value={o.data.status} /></View><Text style={s.muted}>{o.data.recipient.name} - {stateLabel(o.data.method)}</Text><Text style={s.price}>{money(o.data.total)}</Text><Button title="Open order" secondary onPress={() => { setOrderEditId(o.id); setOrderNote(''); setRider(null); }} /></Card>)}{!visibleOrders.length && <Card><Text style={s.muted}>No orders match this filter.</Text></Card>}</>}
+      </> : <><Card><CheckoutField label="Search orders" value={query} onChangeText={setQuery} /><FilterChips options={['All', 'Current', 'Closed'].map(value => ({ value, label: value }))} selected={filter} onSelect={setFilter} accessibilityLabel="Filter orders" /></Card>{visibleOrders.map(o => {
+        const action = nextOrderAction(o);
+        const openDetails = () => { setOrderEditId(o.id); setOrderNote(''); setRider(null); };
+        return <Card key={o.id}>
+          <View style={s.between}><Text style={[s.heading, { flex: 1 }]} numberOfLines={1}>{o.data.id}</Text><Status value={o.data.status} /></View>
+          <Text style={s.text}>{o.data.recipient.name}</Text>
+          <View style={s.between}><Text style={s.muted}>{stateLabel(o.data.method)} · {o.data.lines.length} {o.data.lines.length === 1 ? 'item' : 'items'}</Text><Text style={s.price}>{money(o.data.total)}</Text></View>
+        <OrderTimeline order={o.data} embedded orientation="horizontal" />
+          <View style={[s.between, { paddingTop: 4 }]}>
+            {action && <Button title={action.label} disabled={busy} onPress={() => {
+              if (action.assignRider) openDetails();
+              else if (action.status) setQuickConfirm({ orderId: o.id, status: action.status, label: action.label, success: action.success ?? `${action.label} updated.` });
+            }} />}
+            <TextLink title="Order details" icon="arrow-right" onPress={openDetails} />
+          </View>
+          {quickConfirm?.orderId === o.id && <View style={{ gap: 8, alignItems: 'center', paddingTop: 8 }}>
+            <Text style={s.text}>Confirm {quickConfirm.label.toLowerCase()}?</Text>
+            <View style={[s.row, { justifyContent: 'center' }]}>
+              <Button title="Confirm" disabled={busy} onPress={() => void act(
+                () => api.pharmacyOrderAction(o.id, { version: o.version, status: quickConfirm.status }),
+                quickConfirm.success,
+                result => { storeUndo(result, undoLabel(quickConfirm.status)); setQuickConfirm(null); },
+              )} />
+              <Button title="Cancel" secondary disabled={busy} onPress={() => setQuickConfirm(null)} />
+            </View>
+          </View>}
+        </Card>;
+      })}{!visibleOrders.length && <Card><Text style={s.muted}>No orders match this filter.</Text></Card>}</>}
     </>}
     {tab === 'profile' && <>
-      {approved && <><Card><Text style={s.heading}>{app.name}</Text><Text style={s.muted}>{app.address}</Text><Badge text={`${stateLabel(session?.role || 'staff')}${session?.can_review ? ' - Verified pharmacist' : ''}`} /><Text style={s.muted}>{profile?.email}</Text></Card>{session?.role === 'owner' && <BranchProfile app={app} busy={busy} save={data => void act(() => api.pharmacyApplication(data, true), 'Profile saved.')} />}<DestinationMap address={app.address} verifiedPoint={app.point} /><Card><Text style={s.heading}>Linked staff</Text>{team.map(member => <View key={member.id} style={{ gap: 4 }}><Text style={s.text}>{member.name || member.email}</Text><Text style={s.caption}>{stateLabel(member.role)}{member.verified_pharmacist ? " - Verified pharmacist" : ""}{member.active ? "" : " - Inactive"}</Text></View>)}<Text style={s.caption}>Admin verifies pharmacist credentials and manages staff permissions.</Text></Card></>}
-      {approved && session?.role === 'owner' && <PharmacyTeamInvitations />}<Card><Button title={profile?.isStaff ? 'Back to administration' : 'Customer home'} secondary onPress={() => router.replace(profile?.isStaff ? '/admin' : '/home')} /><Button title="Sign out" secondary disabled={busy} onPress={async () => { await signOut(); router.replace('/'); }} /></Card><ProfileLinks />
+      {profile && <Card>
+        <Text style={s.heading}>{approved ? app.name : profile.fullName}</Text>
+        {approved && <>
+          <Text style={s.muted}>{app.address}</Text>
+          <Badge text={`${stateLabel(session?.role || 'staff')}${session?.can_review ? ' - Verified pharmacist' : ''}`} />
+        </>}
+        <Text style={s.muted}>{profile.email}</Text>
+        <Button title="Sign out" danger disabled={busy} onPress={async () => { await signOut(); router.replace('/'); }} />
+      </Card>}
+      {approved && <>{session?.role === 'owner' && <BranchProfile app={app} busy={busy} save={data => void act(() => api.pharmacyApplication(data, true), 'Profile saved.')} />}<DestinationMap address={app.address} verifiedPoint={app.point} /><Card><Text style={s.heading}>Linked staff</Text>{team.map(member => <View key={member.id} style={{ gap: 4 }}><Text style={s.text}>{member.name || member.email}</Text><Text style={s.caption}>{stateLabel(member.role)}{member.verified_pharmacist ? " - Verified pharmacist" : ""}{member.active ? "" : " - Inactive"}</Text></View>)}<Text style={s.caption}>Admin verifies pharmacist credentials and manages staff permissions.</Text></Card></>}
+      {approved && session?.role === 'owner' && <PharmacyTeamInvitations />}<Card><Button title={profile?.isStaff ? 'Back to administration' : 'Customer home'} secondary onPress={() => router.replace(profile?.isStaff ? '/admin' : '/home')} /></Card><ProfileLinks />
     </>}
   </Page>;
 }
