@@ -1,4 +1,4 @@
-import React, { useContext, useRef } from 'react';
+import React, { useContext, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View, ScrollView, TextInput, useWindowDimensions, type StyleProp, type ViewStyle } from 'react-native';
 import { router } from 'expo-router';
 import { Icon, type IconName } from './icon';
@@ -25,7 +25,7 @@ export const s = StyleSheet.create({
   input: { flex: 1, minWidth: 80, minHeight: 50, fontSize: 16, lineHeight: 24, paddingVertical: 12, color: colors.dark, fontFamily: fontFamilies.regular },
   button: { minHeight: 48, borderRadius: 8, paddingHorizontal: 18, paddingVertical: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.teal, flexDirection: 'row', gap: 8 },
   buttonText: { color: colors.white, fontWeight: '600', fontSize: 15, lineHeight: 24, flexShrink: 1 },
-  link: { color: colors.teal, fontSize: 14, lineHeight: 22, fontWeight: '600' },
+  link: { color: '#08665D', fontSize: 14, lineHeight: 22, fontWeight: '600' },
   divider: { borderBottomWidth: 1, borderColor: colors.line },
 });
 
@@ -64,7 +64,7 @@ export function FilterChips<T extends string>({ options, selected, onSelect, acc
     {options.map(option => {
       const active = option.value === selected;
       return <Pressable key={option.value} accessibilityRole="tab" accessibilityLabel={option.label} accessibilityState={{ selected: active }} aria-pressed={active} onPress={() => onSelect(option.value)} style={({ pressed }) => ({ minHeight: 44, justifyContent: 'center', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8, borderWidth: 1, borderColor: active ? colors.teal : colors.line, backgroundColor: active ? colors.pale : colors.white, opacity: pressed ? 0.75 : 1 })}>
-        <Text style={{ color: active ? colors.teal : colors.muted, fontSize: 14, lineHeight: 20, fontWeight: '600' }}>{option.label}</Text>
+        <Text style={{ color: active ? colors.teal : '#46544F', fontSize: 14, lineHeight: 20, fontWeight: '600' }}>{option.label}</Text>
       </Pressable>;
     })}
   </ScrollView>;
@@ -82,8 +82,17 @@ export function Back({ title, onBack }: { title: string; onBack?: () => void }) 
   </Pressable><Text accessibilityRole="header" style={s.title}>{title}</Text></View>;
 }
 
-export function Search({ value, onChange, onSubmit, inline = false, onDark = false }: { value: string; onChange: (value: string) => void; onSubmit: () => void; inline?: boolean; onDark?: boolean }) {
+export function Search({ value, onChange, onSubmit, inline = false, onDark = false, hero = false }: { value: string; onChange: (value: string) => void; onSubmit: () => void; inline?: boolean; onDark?: boolean; hero?: boolean }) {
   const fontsReady = useContext(FontsReady);
+  const [focused, setFocused] = useState(false);
+  const viewportWidth = useWindowDimensions().width;
+  const compactHero = hero && viewportWidth < 480;
+  if (hero) return <View style={{ flexDirection: 'row', alignItems: 'center', minHeight: compactHero ? 54 : 60, backgroundColor: colors.white, borderWidth: focused ? 2 : 1, borderColor: focused ? '#A7F3D0' : '#D9E8E3', borderRadius: compactHero ? 14 : 16, paddingLeft: compactHero ? 12 : 16, paddingRight: compactHero ? 5 : 6, shadowColor: focused ? '#A7F3D0' : '#002F2B', shadowOpacity: focused ? 0.55 : 0.16, shadowRadius: focused ? 10 : 16, shadowOffset: { width: 0, height: 8 }, elevation: focused ? 5 : 3 }}>
+    <Icon name="search" color={colors.muted} />
+    <TextInput accessibilityLabel="Search medicine name, strength, or form" placeholder={compactHero ? 'Medicine or generic' : 'Medicine name or generic'} placeholderTextColor={colors.muted} value={value} onChangeText={onChange} onSubmitEditing={onSubmit} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} returnKeyType="search" style={[s.input, { minHeight: compactHero ? 50 : 56, paddingVertical: compactHero ? 10 : 14, paddingLeft: compactHero ? 8 : 12, fontSize: compactHero ? 15 : 16 }, !fontsReady && { fontFamily: undefined }]} autoCorrect={false} />
+    {!!value && <Pressable accessibilityRole="button" accessibilityLabel="Clear search" onPress={() => onChange('')} style={{ minWidth: 42, minHeight: 48, alignItems: 'center', justifyContent: 'center' }}><Icon name="close" size={18} color={colors.muted} /></Pressable>}
+    <Pressable accessibilityRole="button" accessibilityLabel="Search medicines" onPress={onSubmit} style={({ pressed }) => ({ minHeight: compactHero ? 42 : 46, alignItems: 'center', justifyContent: 'center', paddingHorizontal: compactHero ? 12 : 18, borderRadius: 12, backgroundColor: '#F59E0B', opacity: pressed ? 0.8 : 1 })}><Text style={{ color: '#26332F', fontSize: compactHero ? 14 : 15, lineHeight: 22, fontWeight: '700' }}>Search</Text></Pressable>
+  </View>;
   return <View style={{ gap: 10, flexDirection: inline ? 'row' : 'column', alignItems: 'stretch' }}><View style={{ flex: inline ? 1 : undefined, minWidth: 0, flexDirection: 'row', alignItems: 'center', backgroundColor: colors.white, borderWidth: 1, borderColor: '#AEBFB7', borderRadius: 8, gap: 10, paddingLeft: 14 }}>
     <Icon name="search" color={colors.muted} />
     <TextInput accessibilityLabel="Search medicine name, strength, or form" placeholder="Medicine name or generic" placeholderTextColor={colors.muted} value={value} onChangeText={onChange} onSubmitEditing={onSubmit} returnKeyType="search" style={[s.input, !fontsReady && { fontFamily: undefined }]} autoCorrect={false} />

@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from urllib.parse import parse_qs, unquote, urlparse
 
 from django.core.exceptions import ImproperlyConfigured
 
@@ -34,23 +35,49 @@ TEMPLATES = [{"BACKEND": "django.template.backends.django.DjangoTemplates", "DIR
 WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
 
-database_name = os.getenv("DB_NAME", "").strip()
-if not database_name:
-    raise ImproperlyConfigured("Set DB_NAME to your PostgreSQL database name in backend/.env or the environment.")
-
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": database_name,
-        "USER": os.getenv("DB_USER", ""),
-        "PASSWORD": os.getenv("DB_PASSWORD", ""),
-        "HOST": os.getenv("DB_HOST", "127.0.0.1"),
-        "PORT": os.getenv("DB_PORT", "5432"),
-        "CONN_MAX_AGE": 60,
+database_url = os.getenv("SUPABASE_DB_URL", "").strip() or os.getenv("DATABASE_URL", "").strip()
+if database_url:
+    parsed_database_url = urlparse(database_url)
+    if parsed_database_url.scheme not in ("postgres", "postgresql") or not parsed_database_url.hostname or not parsed_database_url.path.strip("/"):
+        raise ImproperlyConfigured("SUPABASE_DB_URL must be a PostgreSQL connection URL from the Supabase Connect dialog.")
+    query = parse_qs(parsed_database_url.query)
+    database_options = {}
+    sslmode = query.get("sslmode", ["require"])[0]
+    if sslmode:
+        database_options["sslmode"] = sslmode
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": unquote(parsed_database_url.path.lstrip("/")),
+            "USER": unquote(parsed_database_url.username or ""),
+            "PASSWORD": unquote(parsed_database_url.password or ""),
+            "HOST": parsed_database_url.hostname,
+            "PORT": str(parsed_database_url.port or 5432),
+            "OPTIONS": database_options,
+            "CONN_MAX_AGE": int(os.getenv("DB_CONN_MAX_AGE", "60")),
+            "CONN_HEALTH_CHECKS": True,
+        }
     }
-}
+    database_name = DATABASES["default"]["NAME"]
+else:
+    database_name = os.getenv("DB_NAME", "").strip()
+    if not database_name:
+        raise ImproperlyConfigured("Set SUPABASE_DB_URL to connect to Supabase, or DB_NAME for a local PostgreSQL database.")
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": database_name,
+            "USER": os.getenv("DB_USER", ""),
+            "PASSWORD": os.getenv("DB_PASSWORD", ""),
+            "HOST": os.getenv("DB_HOST", "127.0.0.1"),
+            "PORT": os.getenv("DB_PORT", "5432"),
+            "CONN_MAX_AGE": 60,
+        }
+    }
 test_database_name = os.getenv("DB_TEST_NAME", "").strip()
 if test_database_name:
+    if database_url:
+        raise ImproperlyConfigured("Do not configure DB_TEST_NAME with a Supabase connection. Use a separate local test database or isolated test settings.")
     if test_database_name == database_name:
         raise ImproperlyConfigured("DB_TEST_NAME must refer to a separate PostgreSQL database.")
     DATABASES["default"]["TEST"] = {"NAME": test_database_name}

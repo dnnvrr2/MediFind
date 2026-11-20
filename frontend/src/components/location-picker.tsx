@@ -40,10 +40,10 @@ export function LocationPicker({ onDark = false, onSelect }: { onDark?: boolean;
     close();
   }
   return <>
-    <Pressable accessibilityRole="button" accessibilityLabel={`Change location. Current area: ${area}`} onPress={() => { changeDraft(''); setOpen(true); }} style={({ pressed }) => ({ alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 40, maxWidth: '100%', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, borderWidth: 1, borderColor: onDark ? '#438D83' : colors.line, backgroundColor: onDark ? '#075F56' : colors.white, opacity: pressed ? 0.8 : 1 })}>
+    <Pressable accessibilityRole="button" accessibilityLabel={`Change location. Current area: ${area}`} onPress={() => { changeDraft(''); setOpen(true); }} style={({ pressed }) => ({ alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 42, maxWidth: '100%', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, borderWidth: 1, borderColor: onDark ? '#77BEB1' : colors.line, backgroundColor: onDark ? '#FFFFFF20' : colors.white, opacity: pressed ? 0.8 : 1 })}>
       <Icon name="map-pin" size={16} color={onDark ? colors.white : colors.teal} />
       <Text style={{ flexShrink: 1, fontSize: 13, lineHeight: 20, fontWeight: '500', color: onDark ? colors.white : colors.dark }}>{area}</Text>
-      <Text style={{ flexShrink: 0, fontSize: 13, lineHeight: 20, fontWeight: '500', color: onDark ? colors.white : colors.teal }}>Change</Text>
+      {onDark ? <View style={{ transform: [{ rotate: '90deg' }] }}><Icon name="arrow-right" size={15} color={colors.white} /></View> : <Text style={{ flexShrink: 0, fontSize: 13, lineHeight: 20, fontWeight: '500', color: colors.teal }}>Change</Text>}
     </Pressable>
     <Modal visible={open} transparent animationType="fade" onRequestClose={close}>
       <View style={{ flex: 1, backgroundColor: '#102D2780', justifyContent: 'center', padding: 20 }}><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', width: '100%', maxWidth: 540, alignSelf: 'center' }}><View accessibilityViewIsModal style={[s.card, { padding: 24, gap: 18 }]}>

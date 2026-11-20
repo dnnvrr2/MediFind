@@ -5,12 +5,12 @@ This milestone adds the Django API foundation for persistent customer accounts, 
 ## Start locally
 
 1. Create a virtual environment in `backend` and install `-r requirements.txt`.
-2. Create a PostgreSQL login and a database owned by that login. Copy `.env.example` to `.env` and set `DJANGO_SECRET_KEY`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`, and `DB_PORT`. Environment variables set by the host take precedence over this file.
+2. Copy `.env.example` to `.env` and set `DJANGO_SECRET_KEY`. For a local database, configure `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`, and `DB_PORT`. To use Supabase instead, set `SUPABASE_DB_URL` to the PostgreSQL URI from the Supabase Dashboard's **Connect** dialog; it takes precedence over the local `DB_*` settings. Use the **Session pooler** URI for a typical IPv4 development network, or the direct URI when the backend host supports IPv6. Keep this password in `backend/.env`, never in frontend configuration or Git. Percent-encode reserved characters in the password. Environment variables set by the host take precedence over this file. Leave `DB_TEST_NAME` blank while using Supabase; the project refuses to configure the hosted project database as Django's test database.
 3. Run `python manage.py migrate` and `python manage.py runserver 0.0.0.0:8001`.
 
 PostgreSQL is required. Do not use the development secret key or DEBUG mode in production.
 
-For tests, create a separate database owned by the same login, set its name in `DB_TEST_NAME`, and run `python manage.py test --keepdb`. Django applies test migrations to that database and reuses it for later runs.
+For tests, use a separate local PostgreSQL test database and set its name in `DB_TEST_NAME`, or use isolated test settings. Do not point Django tests at the Supabase project database. Django applies test migrations to the test database.
 
 ## API
 
