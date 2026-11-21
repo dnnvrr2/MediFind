@@ -76,4 +76,4 @@ Riders sign in at `/rider/login`. Staff approve rider applications, and dispatch
 - **Frontend:** Expo (React Native) with Expo Router, TypeScript
 - **Backend:** Django REST API
 - **Database:** PostgreSQL
-- **Platforms:** Android, iOS
+- **Platforms:** Android, iOS, Web
