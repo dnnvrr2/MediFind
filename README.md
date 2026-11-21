@@ -69,3 +69,11 @@ The existing customer screens now use locally bundled Inter fonts, the custom SV
 ## Rider portal
 
 Riders sign in at `/rider/login`. Staff approve rider applications, and dispatch assigns riders after the pharmacy confirms the order is ready. See [Rider portal](docs/RIDER_PORTAL.md) for the delivery workflow.
+
+
+## Tech Stack
+
+- **Frontend:** Expo (React Native) with Expo Router, TypeScript
+- **Backend:** Django REST API
+- **Database:** PostgreSQL
+- **Platforms:** Android, iOS
