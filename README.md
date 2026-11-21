@@ -4,6 +4,8 @@
 
 MediFind connects customers, pharmacies, staff, and riders. The Expo frontend runs on Android, iOS, and the web.
 
+For a reviewable team contribution, follow the [GitHub collaboration workflow](docs/GITHUB_WORKFLOW.md).
+
 ### Run
 
 - In the primary Desktop checkout, double-click `Start MediFind Local.cmd` to start both servers. The backend uses port 8001 and the frontend uses port 8081; `frontend/.env` sets `EXPO_PUBLIC_API_PORT=8001` for direct Expo commands as well. Native development still detects the computer's LAN address automatically. Restart Expo after changing API configuration.
