@@ -26,7 +26,7 @@ Pharmacy inventory supports owner-configured Manual updates and CSV imports. Ope
 - Pharmacy order submission, pickup and delivery tracking, and cancellation before pharmacy acceptance.
 - Private prescription uploads, pharmacist review, and ordering of approved items.
 - Account registration, sign-in, profile editing, and password resets.
-- Rider applications, staff approval, and delivery dispatch.
+- Processing delivery partner requests, getting them cleared by staff, and assigning deliveries.
 
 The catalog comes from approved pharmacy records and inventory in PostgreSQL. Each signed-in account's cart is saved on the current device. Checkout details are kept for the current session. Payment is collected at pickup or delivery.
 
