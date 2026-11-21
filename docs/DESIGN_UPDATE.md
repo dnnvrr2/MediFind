@@ -27,4 +27,7 @@ Implemented in the existing Expo customer preview on October 20, 2026.
 
 Location selection, verified pharmacy details/live stock timestamps, prescription processing, checkout, accounts, and backend integration remain later functional milestones. No fake distances, live updates, or working location picker were added. Large system font settings and Android/iOS device rendering still require physical-device testing; text scaling has not been disabled.
 
-Screenshots: customer-home-mobile-redesign.png and customer-home-desktop-redesign.png in docs.
+## Customer Home screenshots
+
+- [Mobile Home](customer-home-mobile-redesign.png) — shows the medicine search and bottom navigation.
+- [Desktop Home](customer-home-desktop-redesign.png) — shows the two-column layout for medicine and pharmacy listings.
