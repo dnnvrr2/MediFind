@@ -66,7 +66,7 @@ See the backend API notes for current ordering and prescription behavior.
 
 ## Customer design update
 
-The existing customer screens now use locally bundled Inter fonts, the custom SVG icons, a compact search-focused Home, and medicine/pharmacy rows with separators. See docs/DESIGN_UPDATE.md for the changes, validation, and device-testing limits. Edit icons in frontend/assets/svg and run node scripts/sync-icons.mjs from frontend to refresh the registry.
+The customer interface has been improved with locally stored Inter fonts, customized SVG icons, a simple homepage focused on medicine searching, and cleaner medicine and pharmacy listings with divider lines. For more details about the updates, testing results, and device compatibility limitations, check docs/DESIGN_UPDATE.md. To modify the icons, edit the files in frontend/assets/svg and run node scripts/sync-icons.mjs inside the frontend folder to update the icon registry.
 
 ## Rider portal
 
